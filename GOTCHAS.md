@@ -249,55 +249,150 @@ Find current port with: `docker ps --format '{{.Names}} {{.Ports}}' | grep boots
 
 ---
 
-## G-22 — `--ssh-private-key-file` creates the SSH secret but does NOT wire it into PreprovisionedCluster/Template sshConfig
+## G-22 — `--ssh-private-key-file` creates the SSH secret but does NOT wire it into PreprovisionedInventory sshConfig
 
-**Discovered:** CAREN logs show `"failed to get sshConfig secret: Secret \"\" not found"` — empty string secret name — despite `--ssh-private-key-file ~/.ssh/nkp_rsa` being passed.
+**Discovered:** `cappp-system/cappp-controller-manager` logs show `"failed to get sshConfig secret: Secret \"\" not found"` — empty string secret name — despite `--ssh-private-key-file` being passed.
 **Impact:** PreprovisionedMachine controller cannot SSH into nodes. Cluster stuck at `WaitingForBootstrapData` indefinitely.
-**Root cause:** `nkp create cluster preprovisioned` creates secret `nkp-cluster-ssh-key` (with `ssh-privatekey` + `ssh-publickey` data keys) but leaves `sshConfig.secretName` empty in the PreprovisionedCluster, PreprovisionedMachineTemplate, and PreprovisionedMachine objects.
-**Fix:** After cluster create, patch all three objects:
+**Root cause:** `nkp create cluster preprovisioned` creates secret `nkp-cluster-ssh-key` but leaves `sshConfig.privateKeyRef.name`, `sshConfig.user`, and `sshConfig.port` unset in both PreprovisionedInventory objects (`nkp-cluster-control-plane` and `nkp-cluster-md-0`).
+
+Key facts:
+- The SSH config lives in **`PreprovisionedInventory.spec.sshConfig`** — NOT in PreprovisionedMachine, PreprovisionedMachineTemplate, or PreprovisionedCluster (those CRDs don't have this field).
+- The responsible controller is **`cappp-system/cappp-controller-manager`** (Cluster API Provider PreProvisioned), not CAREN.
+- PreprovisionedInventory sshConfig schema: `{ port: int, user: string, privateKeyRef: { name: string, namespace: string } }`
+
+**Fix:** After cluster create, patch both inventories:
 ```bash
 KC="$HOME/nkp-bundle/nkp-v2.17.1/kubectl"
 KCF="--kubeconfig=$HOME/.kube/nkp-bootstrap.kubeconfig"
-for obj in \
-  "preprovisionedmachine/nkp-cluster-control-plane-md7lg" \
-  "preprovisionedmachinetemplate/nkp-cluster-control-plane" \
-  "preprovisionedmachinetemplate/nkp-cluster-md-0"; do
-  "$KC" $KCF patch "$obj" -n default --type=merge \
-    -p '{"spec":{"sshConfig":{"secretName":"nkp-cluster-ssh-key"}}}'
+for inv in nkp-cluster-control-plane nkp-cluster-md-0; do
+  "$KC" $KCF patch preprovisionedinventory "$inv" -n default --type=merge \
+    -p '{"spec":{"sshConfig":{"port":22,"user":"ice","privateKeyRef":{"name":"nkp-cluster-ssh-key","namespace":"default"}}}}'
 done
-"$KC" $KCF patch preprovisionedcluster nkp-cluster -n default --type=merge \
-  -p '{"spec":{"sshConfig":{"secretName":"nkp-cluster-ssh-key"}}}'
 ```
-**Note:** PreprovisionedMachine spec sshConfig path may differ — verify with `kubectl get preprovisionedmachine -o yaml` before patching.
+Verify: `kubectl get preprovisionedinventory nkp-cluster-control-plane -n default -o jsonpath='{.spec.sshConfig}'`
 
 ---
 
-## SESSION CHECKPOINT — 2026-04-29 session 2
+## G-23 — NKP deploy RSA key not in `authorized_keys` → SSH auth fails after G-22 fix
 
-**Completed this session:**
-- All 3 nodes prereqs done (158 confirmed healthy post-reboot)
-- Bundle extracted: `~/nkp-bundle/nkp-v2.17.1/` on 159
-- Bootstrap created (no --bundle): KIND cluster on 159, kubeconfig `~/.kube/nkp-bootstrap.kubeconfig` → port 38077
-- External registry: `registry:2` container on 159:5000 with 100 images (konvoy + kommander pushed via `nkp push bundle`)
-- `nkp create cluster preprovisioned --self-managed` launched in tmux session `cluster-create` on 159
-- Cluster stuck: PreprovisionedMachine can't get SSH secret (G-22 above)
-- Patches applied to PreprovisionedMachineTemplate + PreprovisionedCluster; PreprovisionedMachine direct patch pending verification
+**Discovered:** After fixing G-22, cappp logs show `ssh: unable to authenticate, attempted methods [none publickey], no supported methods remain` for all 3 nodes.
+**Impact:** Even with `sshConfig.privateKeyRef` correctly set, cappp still cannot SSH in because the public key from `nkp-cluster-ssh-key` is not listed in `~ice/.ssh/authorized_keys` on the nodes.
+**Root cause:** `--ssh-private-key-file` stores the private key in a Kubernetes secret but does NOT distribute the corresponding public key to the nodes' `authorized_keys`. The nodes were set up with a different key (e.g., a Windows workstation ed25519 key). The NKP deploy RSA key (4096-bit, comment `nkp-deploy`) is entirely absent.
+**Fix:** Extract the public key from the secret and append it to `authorized_keys` on all 3 nodes:
+```bash
+KC="$HOME/nkp-bundle/nkp-v2.17.1/kubectl"
+KCF="--kubeconfig=$HOME/.kube/nkp-bootstrap.kubeconfig"
 
-**Current state:**
-- tmux: `cluster-create` running `nkp create cluster` → `~/cluster-create.log` (39 lines, stuck at "Waiting for cluster infrastructure to be ready...")
-- Bootstrap kubeconfig: `~/.kube/nkp-bootstrap.kubeconfig` → `https://127.0.0.1:38077`
-- CAREN pod: `nkp-system/caren-controller-manager-5d46f9979d-w2h6n`
-- SSH secret: `nkp-cluster-ssh-key` in `default` ns, has `ssh-privatekey` + `ssh-publickey`
-- Script ready: `/tmp/full-spec.sh` on 159 — run to get PreprovisionedMachine full yaml + CAREN logs
+# Extract public key from secret
+"$KC" $KCF get secret nkp-cluster-ssh-key -n default \
+  -o jsonpath='{.data.ssh-privatekey}' | base64 -d > /tmp/nkp-key.pem
+chmod 600 /tmp/nkp-key.pem
+NKP_PUBKEY=$(ssh-keygen -y -f /tmp/nkp-key.pem)
 
-**Next on resume:**
-1. Run `bash /tmp/full-spec.sh` on 159 to verify patch took effect + check if CAREN SSH errors cleared
-2. If sshConfig still empty after patch: check exact spec field path from the yaml, re-patch correctly
-3. Once SSH secret wired: CAREN will SSH into 159 → install containerd from bundle → run kubeadm init
-4. Monitor machines joining (158, 156 next)
-5. Wait for `EXIT:0` in `~/cluster-create.log` + cluster kubeconfig written
-6. Untaint CP nodes, set up MetalLB IPAddressPool, install trimmed Kommander
-7. commit-and-log
+# Add to local node (159)
+echo "$NKP_PUBKEY nkp-deploy" >> ~/.ssh/authorized_keys
+
+# Add to remote nodes via sshpass (requires sshpass + passwordless from prereqs)
+for NODE in 192.168.1.158 192.168.1.156; do
+  sshpass -p '***REMOVED***' ssh -o StrictHostKeyChecking=no ice@$NODE \
+    "echo '$NKP_PUBKEY nkp-deploy' >> ~/.ssh/authorized_keys"
+done
+rm -f /tmp/nkp-key.pem
+```
+**Script fix:** `nkp-deploy.sh` prereqs phase must add the deploy key to `authorized_keys` on all nodes before `nkp create cluster` runs.
+
+---
+
+## G-24 — NIB provision job fails: `NO_PUBKEY` for `pkgs.k8s.io/core:/stable:/v1.30` apt repo
+
+**Discovered:** `cappp-system/cappp-controller-manager` creates a Kubernetes Job (`<machine-name>-provision`) that runs an Ansible playbook to bootstrap the node. The first Ansible task (`repo : update apt cache`) fails with `apt-get update` rc=100: `NO_PUBKEY 234654DA9A296436` for the Kubernetes apt repo.
+**Impact:** `NIBFailed` condition set on PreprovisionedMachine; `BackoffLimitExceeded` on Job; bootstrap never starts. Status stuck at `BootstrapExecSucceeded: False`.
+**Root cause:** node-prereqs.sh adds `/etc/apt/sources.list.d/kubernetes.list` pointing to `pkgs.k8s.io/core:/stable:/v1.30/deb` but does NOT import the corresponding GPG keyring at `/etc/apt/keyrings/kubernetes-apt-keyring.gpg`. The NIB Ansible's first `apt-get update` hits a signature verification failure.
+**Fix:** On all 3 nodes before triggering cluster create (add to node-prereqs phase):
+```bash
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key \
+  | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+```
+Then after applying the fix, delete the failed job and force a reconcile:
+```bash
+KC="$HOME/nkp-bundle/nkp-v2.17.1/kubectl"
+KCF="--kubeconfig=$HOME/.kube/nkp-bootstrap.kubeconfig"
+"$KC" $KCF delete job <machine-name>-provision -n default
+"$KC" $KCF annotate preprovisionedmachine <machine-name> -n default \
+  "reconcile.force/ts=$(date +%s)" --overwrite
+```
+**Script fix:** Add GPG key import to `node-prereqs.sh` immediately after adding the kubernetes.list source.
+
+---
+
+## G-25 — `nkp create cluster --self-managed` timeout removes docker-ce and kills bootstrap cluster
+
+**Discovered:** After `nkp create cluster preprovisioned --self-managed` exceeded its internal deadline (rate limiter context timeout at ~45 min), it ran cleanup. Cleanup included `nkp delete bootstrap`, which: (1) stopped and removed the KIND container `konvoy-capi-bootstrapper-control-plane`, and (2) **uninstalled the `docker-ce` package** (`dpkg -l` shows `rc` status — removed, config retained). Docker daemon stopped at 16:15:05. The docker.socket unit symlink (`/etc/systemd/system/multi-user.target.wants/docker.service → /usr/lib/systemd/system/docker.service`) was left broken — target file removed by apt purge.
+**Impact:** Bootstrap KIND cluster gone. CAPI objects (Cluster, KCP, PreprovisionedMachine, Jobs) still present in etcd but inaccessible. All kubectl operations fail with "connection refused".
+**Recovery:**
+1. Reinstall docker-ce: `sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce`
+2. Create the missing systemd unit (docker-ce only installed `/etc/init.d/docker`, not the systemd unit):
+```bash
+sudo tee /usr/lib/systemd/system/docker.service > /dev/null << 'UNIT'
+[Unit]
+Description=Docker Application Container Engine
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=notify
+ExecStart=/usr/bin/dockerd -H unix:///var/run/docker.sock
+Restart=always
+RestartSec=2
+[Install]
+WantedBy=multi-user.target
+UNIT
+sudo systemctl daemon-reload && sudo systemctl enable --now docker
+```
+3. Docker auto-restarts the stopped KIND containers (they were only stopped, not removed).
+4. Bootstrap cluster comes back on the SAME port (38077 in this case) — kubeconfig valid.
+5. Delete the stale failed provision job and force reconcile to resume.
+**Script fix:** `nkp-deploy.sh` must enable + start Docker via systemd BEFORE `nkp create bootstrap`, and must ensure docker-ce is installed with the unit file. Also: run `nkp create cluster` with `--timeout 2h` to avoid premature cleanup.
+
+---
+
+## G-26 — Bootstrap API server takes ~2-3 min to become ready after KIND container restart
+
+**Discovered:** After `docker start konvoy-capi-bootstrapper-control-plane`, the container is `Up` immediately but port 38077 refuses connections for ~2 minutes while kube-apiserver, etcd, and controller-manager start inside KIND. kubectl calls during this window fail with "connection refused".
+**Fix:** Poll with `nc` or `curl --insecure https://127.0.0.1:38077/healthz` in a loop (up to 3 min) before running kubectl commands after a bootstrap cluster restart.
+
+---
+
+## SESSION CHECKPOINT — 2026-04-29 session 3
+
+**All fixes applied this session (G-22 through G-26):**
+- G-22 CORRECTED: `sshConfig` is on `PreprovisionedInventory`, not Machine/Template/Cluster. Patched both inventories (`nkp-cluster-control-plane`, `nkp-cluster-md-0`) with `port:22, user:ice, privateKeyRef.name:nkp-cluster-ssh-key`
+- G-23: NKP deploy RSA key added to `~/.ssh/authorized_keys` on 159, 158, 156
+- G-24: k8s apt repo GPG key imported on all 3 nodes (`/etc/apt/keyrings/kubernetes-apt-keyring.gpg` for pkgs.k8s.io/core/stable/v1.30)
+- G-25: `docker-ce` removed by NKP cleanup; reinstalled. Broken docker.service symlink → unit file being created at `/usr/lib/systemd/system/docker.service`
+- G-26: KIND container takes 2-3 min after start before API server responds
+
+**Current state (end of session 3):**
+- Docker: reinstalled (`ii docker-ce 5:29.4.1`) but daemon currently DOWN — unit file `/usr/lib/systemd/system/docker.service` may or may not be fully written (script timed out)
+- KIND containers: STOPPED (will auto-start when Docker comes up) — `konvoy-capi-bootstrapper-control-plane` and `registry`
+- Bootstrap kubeconfig: `~/.kube/nkp-bootstrap.kubeconfig` → `https://127.0.0.1:38077` (port valid once KIND comes back)
+- CAPI objects: all present in etcd (survived Docker restart cycle) — PreprovisionedInventory patched, SSH key wired
+- Last provision job: deleted. NIB job will be recreated by cappp on next reconcile.
+- NKP binary: `/usr/local/bin/nkp` and `/home/ice/nkp-bundle/nkp-v2.17.1/cli/nkp`
+- kubectl: `/home/ice/nkp-bundle/nkp-v2.17.1/kubectl`
+
+**Next on resume — in order:**
+1. Verify `/usr/lib/systemd/system/docker.service` exists. If not, create it (see G-25 fix block)
+2. `sudo systemctl daemon-reload && sudo systemctl enable --now docker`
+3. Poll for KIND API server: `until nc -z 127.0.0.1 38077; do sleep 10; done` (up to 3 min, per G-26)
+4. Test kubectl: `$KC $KCF get nodes`
+5. Delete stale provision job if it exists: `$KC $KCF delete job nkp-cluster-control-plane-md7lg-provision -n default`
+6. Force reconcile: `$KC $KCF annotate preprovisionedmachine nkp-cluster-control-plane-md7lg -n default "reconcile.force/ts=$(date +%s)" --overwrite`
+7. Watch NIB job logs — expect apt-get update to pass now (GPG key fixed)
+8. Wait for kubeadm init on 159 (~15-20 min), then 158 and 156 join
+9. When KCP shows INITIALIZED=true: get cluster kubeconfig from bootstrap
+10. Untaint CP nodes, MetalLB, trimmed Kommander
+11. commit-and-log
 
 **Next steps on resume:**
 1. Confirm 158 is up → SSH from 159 with nkp_rsa → fix sudo → run node-prereqs.sh
