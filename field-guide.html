@@ -1,0 +1,1661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NKP 2.17.1 Air-Gapped Bare Metal — Field Guide</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface2: #21262d;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --accent: #58a6ff;
+  --accent2: #3fb950;
+  --warn: #d29922;
+  --danger: #f85149;
+  --purple: #bc8cff;
+  --cyan: #39d353;
+  --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  display: flex;
+}
+
+/* SIDEBAR */
+#sidebar {
+  width: 260px;
+  min-width: 260px;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 1.5rem 0;
+  flex-shrink: 0;
+}
+#sidebar h2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--text-muted);
+  padding: 0 1.25rem .5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: .5rem;
+}
+#sidebar a {
+  display: block;
+  padding: .35rem 1.25rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 13px;
+  border-left: 2px solid transparent;
+  transition: all .15s;
+}
+#sidebar a:hover, #sidebar a.active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  background: rgba(88,166,255,.06);
+}
+#sidebar .section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-muted);
+  padding: .8rem 1.25rem .25rem;
+  opacity: .7;
+}
+
+/* MAIN */
+#main {
+  flex: 1;
+  overflow-x: hidden;
+  max-width: calc(100vw - 260px);
+}
+
+/* HERO */
+#hero {
+  background: linear-gradient(135deg, #0d1117 0%, #161b22 40%, #1a2332 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 4rem 3rem 3rem;
+  position: relative;
+  overflow: hidden;
+}
+#hero::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -10%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(88,166,255,.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+.hero-badge {
+  display: inline-block;
+  background: rgba(88,166,255,.1);
+  border: 1px solid rgba(88,166,255,.3);
+  color: var(--accent);
+  padding: .3rem .8rem;
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  margin-bottom: 1.5rem;
+}
+#hero h1 {
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: .75rem;
+  background: linear-gradient(135deg, #e6edf3, #58a6ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+#hero p.subtitle {
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  max-width: 700px;
+  margin-bottom: 2rem;
+}
+.stats-grid {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.stat-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: .75rem 1.25rem;
+  min-width: 120px;
+}
+.stat-card .value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+.stat-card .label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: .2rem;
+}
+
+/* CONTENT */
+.content-section {
+  padding: 3rem;
+  border-bottom: 1px solid var(--border);
+  max-width: 1100px;
+}
+.content-section:last-child { border-bottom: none; }
+
+h2.section-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: 1.75rem;
+  padding-bottom: .75rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+h2.section-title .num {
+  background: var(--accent);
+  color: #000;
+  font-size: 12px;
+  font-weight: 700;
+  padding: .2rem .55rem;
+  border-radius: 100px;
+}
+h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 2rem 0 .75rem;
+  color: var(--text);
+}
+h3.sub { color: var(--accent); font-size: 1rem; }
+p { margin-bottom: 1rem; color: var(--text-muted); }
+p strong { color: var(--text); }
+ul, ol { padding-left: 1.5rem; margin-bottom: 1rem; }
+li { color: var(--text-muted); margin-bottom: .3rem; }
+li strong { color: var(--text); }
+
+/* CODE */
+pre {
+  background: #010409 !important;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  line-height: 1.6;
+}
+code:not(pre code) {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: .15em .45em;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: .85em;
+  color: var(--cyan);
+}
+
+/* DIAGRAMS */
+.diagram-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2rem;
+  margin: 1.5rem 0;
+  overflow-x: auto;
+}
+.diagram-container h4 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+.mermaid { text-align: center; }
+
+/* TABLES */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-size: 13.5px;
+}
+th {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: .7rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+td {
+  border: 1px solid var(--border);
+  padding: .65rem 1rem;
+  vertical-align: top;
+  color: var(--text-muted);
+}
+td.ok { color: var(--accent2); }
+td.warn { color: var(--warn); }
+td.danger { color: var(--danger); }
+td strong { color: var(--text); }
+tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+
+/* GOTCHA CARDS */
+.gotcha-group { margin-bottom: 1.5rem; }
+.gotcha-group-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--text-muted);
+  margin-bottom: .75rem;
+  padding-bottom: .4rem;
+  border-bottom: 1px solid var(--border);
+}
+details.gotcha {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: .5rem;
+  overflow: hidden;
+}
+details.gotcha[open] { border-color: rgba(88,166,255,.3); }
+details.gotcha summary {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .85rem 1.25rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+details.gotcha summary::-webkit-details-marker { display: none; }
+details.gotcha summary .gid {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 40px;
+}
+details.gotcha summary .gtitle {
+  font-size: 14px;
+  color: var(--text);
+  flex: 1;
+}
+details.gotcha summary .arrow {
+  color: var(--text-muted);
+  transition: transform .2s;
+  font-size: 12px;
+}
+details.gotcha[open] summary .arrow { transform: rotate(90deg); }
+.gotcha-body {
+  padding: 1rem 1.25rem 1.25rem;
+  border-top: 1px solid var(--border);
+  font-size: 13.5px;
+}
+.gotcha-body p { margin-bottom: .6rem; }
+.gotcha-body pre { font-size: 12px; }
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: .15rem .5rem;
+  border-radius: 100px;
+  margin-right: .4rem;
+}
+.tag.impact { background: rgba(248,81,73,.15); color: var(--danger); border: 1px solid rgba(248,81,73,.3); }
+.tag.fix { background: rgba(63,185,80,.12); color: var(--accent2); border: 1px solid rgba(63,185,80,.25); }
+.tag.warn { background: rgba(210,153,34,.12); color: var(--warn); border: 1px solid rgba(210,153,34,.25); }
+
+/* PHASE STEPS */
+.phase-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+.phase-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.phase-num {
+  background: linear-gradient(135deg, var(--accent), #1f6feb);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  padding: .35rem .75rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.phase-name { font-size: 1rem; font-weight: 600; }
+.phase-status {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  padding: .2rem .6rem;
+  border-radius: 100px;
+}
+.status-done { background: rgba(63,185,80,.12); color: var(--accent2); border: 1px solid rgba(63,185,80,.25); }
+.status-manual { background: rgba(210,153,34,.12); color: var(--warn); border: 1px solid rgba(210,153,34,.25); }
+
+/* ALERT BOXES */
+.alert {
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin: 1.25rem 0;
+  border-left: 3px solid;
+  font-size: 14px;
+}
+.alert-warn { background: rgba(210,153,34,.08); border-color: var(--warn); color: var(--text-muted); }
+.alert-danger { background: rgba(248,81,73,.08); border-color: var(--danger); color: var(--text-muted); }
+.alert-info { background: rgba(88,166,255,.08); border-color: var(--accent); color: var(--text-muted); }
+.alert-success { background: rgba(63,185,80,.08); border-color: var(--accent2); color: var(--text-muted); }
+.alert strong { color: var(--text); }
+
+/* FINAL STATE */
+.node-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: .75rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.node-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent2);
+  box-shadow: 0 0 6px var(--accent2);
+  flex-shrink: 0;
+}
+.node-name { font-weight: 700; font-size: 14px; }
+.node-detail { font-size: 12px; color: var(--text-muted); }
+.node-role {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(88,166,255,.1);
+  color: var(--accent);
+  border: 1px solid rgba(88,166,255,.2);
+  padding: .2rem .6rem;
+  border-radius: 100px;
+}
+
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <h2>NKP 2.17.1 Field Guide</h2>
+  <a href="#hero">Overview</a>
+  <div class="section-label">Architecture</div>
+  <a href="#ch-arch">1. Architecture</a>
+  <a href="#ch-arch-physical">↳ Physical Layout</a>
+  <a href="#ch-arch-airgap">↳ Air-Gap Image Flow</a>
+  <a href="#ch-arch-flux">↳ Flux Chain</a>
+  <div class="section-label">Reality Check</div>
+  <a href="#ch-compare">2. Docs vs Reality</a>
+  <div class="section-label">Deploy Phases</div>
+  <a href="#ch-phases">3. Phase-by-Phase</a>
+  <a href="#ch-phases-prereq">↳ Prerequisites</a>
+  <a href="#ch-phases-registry">↳ Registry Setup</a>
+  <a href="#ch-phases-bootstrap">↳ Bootstrap Cluster</a>
+  <a href="#ch-phases-cluster">↳ Cluster Create</a>
+  <a href="#ch-phases-cni">↳ CNI + Networking</a>
+  <a href="#ch-phases-kommander">↳ Kommander</a>
+  <div class="section-label">Deep Dives</div>
+  <a href="#ch-flux">4. Flux Internals</a>
+  <a href="#ch-gotchas">5. Gotcha Compendium</a>
+  <a href="#ch-dashboard">6. Dashboard Access</a>
+  <div class="section-label">Outcome</div>
+  <a href="#ch-final">7. Final State</a>
+</nav>
+
+<!-- MAIN -->
+<div id="main">
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-badge">BATTLE-TESTED · 7 SESSIONS · 42 GOTCHAS</div>
+  <h1>NKP 2.17.1 Air-Gapped<br>Bare Metal Field Guide</h1>
+  <p class="subtitle">
+    A practitioner's guide to deploying Nutanix Kubernetes Platform on bare metal in a fully air-gapped environment —
+    3 control-plane nodes, no workers, trimmed Kommander. Everything the official docs don't tell you.
+  </p>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="value">3</div><div class="label">Control Plane Nodes</div></div>
+    <div class="stat-card"><div class="value">0</div><div class="label">Worker Nodes</div></div>
+    <div class="stat-card"><div class="value">42</div><div class="label">Gotchas Documented</div></div>
+    <div class="stat-card"><div class="value">7</div><div class="label">Deploy Sessions</div></div>
+    <div class="stat-card"><div class="value">22 GB</div><div class="label">Bundle Size</div></div>
+    <div class="stat-card"><div class="value">100%</div><div class="label">Air-Gapped</div></div>
+  </div>
+</section>
+
+<!-- CHAPTER 1: ARCHITECTURE -->
+<section class="content-section" id="ch-arch">
+  <h2 class="section-title"><span class="num">1</span>Architecture</h2>
+
+  <p>
+    This deployment uses the <strong>pre-provisioned</strong> provider — NKP assumes the OS is already installed on each node.
+    A temporary <strong>KIND bootstrap cluster</strong> on the first node acts as the CAPI management plane, provisions
+    the target cluster, then pivots (self-manages) into it. All container images come from a local Docker registry
+    on <code>192.168.1.159:5000</code> — no internet access is required or attempted after initial bundle extraction.
+  </p>
+
+  <h3 id="ch-arch-physical">Physical Layout</h3>
+  <div class="diagram-container">
+    <h4>3-Node Control Plane — Network Topology</h4>
+    <div class="mermaid">
+graph TB
+    subgraph LAN["LAN — 192.168.1.0/24"]
+        direction TB
+        WS["Windows Workstation<br/>SSH Tunnel / Browser"]
+
+        subgraph N159["nkp-bm-01 · 192.168.1.159 — Bootstrap + CP1"]
+            REG["Docker Registry :5000"]
+            KIND["KIND Bootstrap Cluster<br/>konvoy-capi-bootstrapper"]
+            CP1["kubelet · etcd · kube-apiserver"]
+        end
+
+        subgraph N158["nkp-bm-03 · 192.168.1.158 — CP2"]
+            CP2["kubelet · etcd · kube-apiserver"]
+        end
+
+        subgraph N156["nkp-bm-002 · 192.168.1.156 — CP3"]
+            CP3["kubelet · etcd · kube-apiserver"]
+        end
+
+        VIP["VIP 192.168.1.200<br/>kube-vip ARP/GARP<br/>MetalLB L2"]
+    end
+
+    WS -->|SSH :22| N159
+    WS -->|Dashboard HTTPS :443| VIP
+    VIP -->|Floats between| CP1
+    VIP -->|Floats between| CP2
+    VIP -->|Floats between| CP3
+    KIND -->|Provisions via SSH| CP1
+    KIND -->|Provisions via SSH| CP2
+    KIND -->|Provisions via SSH| CP3
+    REG -->|Image pulls :5000| CP1
+    REG -->|Image pulls :5000| CP2
+    REG -->|Image pulls :5000| CP3
+
+    style N159 fill:#1a2332,stroke:#58a6ff,color:#e6edf3
+    style N158 fill:#1a2332,stroke:#30363d,color:#e6edf3
+    style N156 fill:#1a2332,stroke:#30363d,color:#e6edf3
+    style VIP fill:#21262d,stroke:#3fb950,color:#3fb950
+    style REG fill:#0d1117,stroke:#58a6ff,color:#58a6ff
+    style KIND fill:#0d1117,stroke:#d29922,color:#d29922
+    </div>
+  </div>
+
+  <h3>kube-vip VIP Failover</h3>
+  <div class="diagram-container">
+    <h4>kube-vip ARP/GARP Failover — Leader Election</h4>
+    <div class="mermaid">
+sequenceDiagram
+    participant CP1 as CP1 (159)
+    participant CP2 as CP2 (158)
+    participant CP3 as CP3 (156)
+    participant ARP as LAN ARP Table
+    participant Client as kubectl / Dashboard
+
+    CP1->>ARP: GARP: 192.168.1.200 → MAC(159)
+    Client->>ARP: Who has 192.168.1.200?
+    ARP-->>Client: MAC(159)
+    Client->>CP1: API request :6443
+    note over CP1: CP1 dies / loses lease
+    CP2->>ARP: GARP: 192.168.1.200 → MAC(158)
+    Client->>ARP: Who has 192.168.1.200?
+    ARP-->>Client: MAC(158) — cache updated
+    Client->>CP2: API request :6443 (seamless failover)
+    </div>
+  </div>
+
+  <h3 id="ch-arch-airgap">Air-Gap Image Flow</h3>
+  <div class="diagram-container">
+    <h4>How Container Images Reach the Nodes (No Internet)</h4>
+    <div class="mermaid">
+graph LR
+    A["22 GB .tar.gz Bundle<br/>Downloaded externally"] -->|"tar -xzf<br/>~20-30 min"| B["Extracted Bundle<br/>~/nkp-bundle/nkp-v2.17.1/"]
+    B --> C["konvoy-image-bundle.tar<br/>kommander-image-bundle.tar"]
+    C -->|"nkp push bundle<br/>--to-registry localhost:5000"| D["Docker Registry<br/>192.168.1.159:5000"]
+    D -->|"containerd mirror<br/>_default/hosts.toml"| E["All 3 CP Nodes<br/>pull any image<br/>→ redirected to :5000"]
+    B --> F["konvoy-bootstrap-image.tar"]
+    F -->|"docker load"| G["KIND Bootstrap Cluster<br/>Loaded locally on 159"]
+
+    style D fill:#1a2332,stroke:#58a6ff,color:#58a6ff
+    style G fill:#1a2332,stroke:#d29922,color:#d29922
+    </div>
+  </div>
+
+  <h3 id="ch-arch-flux">Flux Reconciliation Chain</h3>
+  <div class="diagram-container">
+    <h4>How Kommander Gets Deployed — Flux CD Pipeline</h4>
+    <div class="mermaid">
+graph TD
+    GR["GitRepository<br/>kommander/kommander.git<br/>(internal git-operator)"]
+    KS["Kustomization<br/>applies manifests from git"]
+    OR1["OCIRepository<br/>platform-version-v2-17-1<br/>→ local registry :5000"]
+    OR2["OCIRepository<br/>per-app chart repos<br/>dex, traefik, kommander..."]
+    HR1["HelmRelease<br/>kommander-flux<br/>(upgrades Flux itself)"]
+    HR2["HelmRelease<br/>gatekeeper<br/>kommander-operator<br/>kommander-appmanagement"]
+    HR3["HelmRelease<br/>dex · traefik · kommander<br/>reloader · dex-k8s-auth<br/>traefik-forward-auth"]
+    KO["kommander-operator<br/>(manages KommanderCore)"]
+    KC["KommanderCore CR<br/>InstallSucceeded=True"]
+
+    GR --> KS
+    KS --> HR1
+    KS --> HR2
+    HR2 --> KO
+    KO --> OR1
+    KO --> OR2
+    OR1 --> KC
+    OR2 --> HR3
+    HR3 --> KC
+
+    style GR fill:#1a2332,stroke:#58a6ff,color:#e6edf3
+    style KC fill:#1a2332,stroke:#3fb950,color:#3fb950
+    style OR1 fill:#21262d,stroke:#d29922,color:#d29922
+    </div>
+  </div>
+</section>
+
+<!-- CHAPTER 2: DOCS VS REALITY -->
+<section class="content-section" id="ch-compare">
+  <h2 class="section-title"><span class="num">2</span>Official Docs vs Reality</h2>
+
+  <p>
+    The Nutanix NKP 2.17 documentation describes a <em>cloud-provisioned</em> happy path. Pre-provisioned air-gapped
+    bare metal diverges significantly. This table captures every major gap discovered across 7 deploy sessions.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:22%">Topic</th>
+        <th style="width:36%">What the Docs Say</th>
+        <th style="width:36%">What You Actually Have to Do</th>
+        <th style="width:6%">Gotcha</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Bundle structure</strong></td>
+        <td class="warn">"Use <code>--bundle</code> flag with the downloaded archive"</td>
+        <td class="ok">Extract the 22 GB <code>.tar.gz</code> first. <code>--bundle</code> wants inner <code>.tar</code> files, not the outer archive.</td>
+        <td>G-03, G-11</td>
+      </tr>
+      <tr>
+        <td><strong>Bootstrap registry</strong></td>
+        <td class="warn">"Bootstrap cluster includes an internal registry"</td>
+        <td class="ok">The bootstrap internal registry has no NodePort — external nodes cannot reach it. You must run a separate Docker <code>registry:2</code> container and push with <code>nkp push bundle</code>.</td>
+        <td>G-04, G-18</td>
+      </tr>
+      <tr>
+        <td><strong>SSH user</strong></td>
+        <td class="warn">Default SSH username is "konvoy"</td>
+        <td class="ok">Pass <code>--ssh-username ice</code> (or your OS user). "konvoy" will fail because the user doesn't exist.</td>
+        <td>G-05</td>
+      </tr>
+      <tr>
+        <td><strong>SSH auth wiring</strong></td>
+        <td class="warn">"Pass <code>--ssh-private-key-file</code> to configure SSH access"</td>
+        <td class="ok">The flag creates a Kubernetes Secret but does <em>not</em> patch it into <code>PreprovisionedInventory.spec.sshConfig</code>. You must manually patch both inventories after cluster create.</td>
+        <td>G-22</td>
+      </tr>
+      <tr>
+        <td><strong>PreprovisionedInventory API group</strong></td>
+        <td class="warn">Docs show CAPI's <code>cluster.x-k8s.io</code> group</td>
+        <td class="ok">NKP uses its own <code>infrastructure.cluster.konvoy.d2iq.io/v1alpha1</code> API group. The upstream group fails with "no matches for kind."</td>
+        <td>G-20</td>
+      </tr>
+      <tr>
+        <td><strong>Workers required</strong></td>
+        <td class="warn">Docs assume at least one worker nodepool</td>
+        <td class="ok">Even with <code>--worker-replicas 0</code>, you must include a worker PreprovisionedInventory with <code>hosts: []</code> or the command errors.</td>
+        <td>G-20</td>
+      </tr>
+      <tr>
+        <td><strong>kube-vip / VIP</strong></td>
+        <td class="warn">Docs say "provide a VIP address" — no further setup described</td>
+        <td class="ok">kube-vip is NOT auto-deployed in pre-provisioned mode. You must either: add the VIP IP to the interface manually + run kubeadm phases, or pre-deploy kube-vip as a static pod.</td>
+        <td>G-29</td>
+      </tr>
+      <tr>
+        <td><strong>cert-manager</strong></td>
+        <td class="warn">Docs say "Kommander installs cert-manager automatically"</td>
+        <td class="ok">Pre-provisioned mode skips cert-manager ClusterResourceSet. Kommander preflight checks for it and hard-stops. Install cert-manager via Helm from local registry first.</td>
+        <td>G-31</td>
+      </tr>
+      <tr>
+        <td><strong>Kommander airgapped flag</strong></td>
+        <td class="warn">"Use <code>--airgapped</code> to skip external connections"</td>
+        <td class="ok">Even with <code>--airgapped</code>, the installer tries to fetch <code>kommander-applications</code> from GitHub. Pass <code>--kommander-applications-repository /local/path/...tar.gz</code> with a local path.</td>
+        <td>G-32</td>
+      </tr>
+      <tr>
+        <td><strong>flux-oci-mirror</strong></td>
+        <td class="warn">Docs describe flux-oci-mirror as the air-gap OCI proxy</td>
+        <td class="ok">flux-oci-mirror requires MITM TLS certs auto-generated during cloud provisioning. In pre-provisioned mode the certs are missing — proxy is completely non-functional. Bypass it by patching OCIRepository URLs to point directly to local registry.</td>
+        <td>G-35</td>
+      </tr>
+      <tr>
+        <td><strong>OCIRepository URLs</strong></td>
+        <td class="warn">Flux resources should auto-configure for air-gap</td>
+        <td class="ok">All OCIRepositories in the git-operator repo hardcode <code>ghcr.io</code> and <code>docker.io</code>. You must clone the internal git repo, replace all external refs with <code>192.168.1.159:5000</code>, and push a new commit.</td>
+        <td>G-37, G-40</td>
+      </tr>
+      <tr>
+        <td><strong>kommander-operator OCIRepositories</strong></td>
+        <td class="warn">Operators respect the airgapped configuration</td>
+        <td class="ok"><code>kommander-operator</code> hardcodes <code>ghcr.io</code> in two OCIRepositories it owns and will revert any manual patches. Must scale operator to 0, patch, wait for Ready=True, scale back.</td>
+        <td>G-36, G-42</td>
+      </tr>
+      <tr>
+        <td><strong>local-volume-provisioner</strong></td>
+        <td class="warn">"Create directories for local storage"</td>
+        <td class="ok">Plain <code>mkdir</code> directories are rejected. Provisioner validates against <code>/proc/mounts</code>. Must use <code>mount --bind /path /path</code> to create real mount points.</td>
+        <td>G-33</td>
+      </tr>
+      <tr>
+        <td><strong>containerd runtime</strong></td>
+        <td class="warn">"Ensure containerd is installed"</td>
+        <td class="ok">NKP bundles its own containerd (v1.7.29-d2iq). The NIB Ansible removes the stock <code>containerd.io</code> package — on the bootstrap node this kills Docker and the KIND cluster. Must neuter dpkg prerm scripts and enable Docker live-restore first.</td>
+        <td>G-27, G-28</td>
+      </tr>
+      <tr>
+        <td><strong>RUNTIME_NAMESPACE env var</strong></td>
+        <td class="warn">Source-controller auto-configures via Downward API</td>
+        <td class="ok">In pre-provisioned mode the <code>RUNTIME_NAMESPACE</code> fieldRef is absent from source-controller. Artifact URLs contain literal <code>$(RUNTIME_NAMESPACE)</code> — kustomize-controller fails DNS lookup. Must set manually until <code>kommander-flux</code> HelmRelease applies the chart correctly.</td>
+        <td>G-34, G-38</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- CHAPTER 3: PHASES -->
+<section class="content-section" id="ch-phases">
+  <h2 class="section-title"><span class="num">3</span>Phase-by-Phase Deployment</h2>
+
+  <div class="diagram-container">
+    <h4>Deployment Flow Overview</h4>
+    <div class="mermaid">
+flowchart LR
+    P0["Phase 0<br/>Preflight"] --> P1["Phase 1<br/>Node Prereqs"]
+    P1 --> P2["Phase 2<br/>Registry Setup"]
+    P2 --> P3["Phase 3<br/>Push Bundles"]
+    P3 --> P4["Phase 4<br/>Bootstrap KIND"]
+    P4 --> P5["Phase 5<br/>Create Cluster"]
+    P5 --> P6["Phase 6<br/>Wait Ready"]
+    P6 --> P7["Phase 7<br/>CNI + MetalLB"]
+    P7 --> P8["Phase 8<br/>cert-manager"]
+    P8 --> P9["Phase 9<br/>Kommander"]
+    P9 --> P10["Phase 10<br/>Fix OCI URLs"]
+
+    style P0 fill:#21262d,stroke:#30363d,color:#e6edf3
+    style P10 fill:#1a2332,stroke:#3fb950,color:#3fb950
+    </div>
+  </div>
+
+  <h3 id="ch-phases-prereq">Phase 0–1 — Preflight &amp; Node Prerequisites</h3>
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-num">Phase 0</span>
+      <span class="phase-name">Preflight Checks</span>
+      <span class="phase-status status-done">SCRIPTED</span>
+    </div>
+    <ul>
+      <li>Verify <code>nkp version</code> = v2.17.1 (not v2.17.0 — bundle names differ)</li>
+      <li>Verify Docker is running: <code>docker info</code></li>
+      <li>Verify bundle <code>.tar</code> files exist in <code>~/nkp-bundle/nkp-v2.17.1/container-images/</code></li>
+      <li>Verify SSH connectivity to all 3 nodes</li>
+    </ul>
+  </div>
+
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-num">Phase 1</span>
+      <span class="phase-name">Node Prerequisites</span>
+      <span class="phase-status status-done">SCRIPTED</span>
+    </div>
+    <p>Run on all 3 nodes before any NKP operations:</p>
+<pre><code class="language-bash"># Disable swap (kubelet refuses to start with swap enabled)
+swapoff -a
+sed -i -E '/^[^#].*[[:space:]]swap[[:space:]]/s/^/#/' /etc/fstab
+
+# Add passwordless sudo for deploy user
+echo 'ice ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/nkp-ice
+chmod 440 /etc/sudoers.d/nkp-ice
+
+# Import Kubernetes apt repo GPG key (NIB Ansible needs this — G-24)
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key \
+  | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+# Create bind-mount volumes for local-volume-provisioner (G-33)
+for i in 01 02 03; do
+  sudo mkdir -p /mnt/disks/vol-$i
+  sudo mount --bind /mnt/disks/vol-$i /mnt/disks/vol-$i
+done</code></pre>
+    <div class="alert alert-warn">
+      <strong>G-27/G-28 CRITICAL (bootstrap node 159 only):</strong> Before running cluster create, neuter the containerd.io dpkg prerm scripts and enable Docker live-restore. Otherwise NIB's <code>apt-get remove containerd.io</code> will kill the KIND cluster.
+    </div>
+<pre><code class="language-bash"># On 159 ONLY — neuter prerm scripts
+for PKG in containerd.io docker-ce; do
+  PRERM="/var/lib/dpkg/info/${PKG}.prerm"
+  [ -f "$PRERM" ] && sudo cp "$PRERM" "${PRERM}.bak" && \
+    printf '#!/bin/sh\nexit 0\n' | sudo tee "$PRERM" > /dev/null
+done
+# Pre-remove containerd.io to avoid EBUSY systemd conflict (G-28)
+sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y containerd.io
+sudo systemctl daemon-reload
+sudo pkill -TERM -x containerd 2>/dev/null || true
+# Enable live-restore
+echo '{"live-restore": true}' | sudo tee /etc/docker/daemon.json
+sudo systemctl reload-or-restart docker</code></pre>
+  </div>
+
+  <h3 id="ch-phases-registry">Phase 2 — Registry Setup</h3>
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-num">Phase 2</span>
+      <span class="phase-name">Local Docker Registry + containerd Mirror Config</span>
+      <span class="phase-status status-done">SCRIPTED</span>
+    </div>
+<pre><code class="language-bash"># Start Docker registry on 159 (if not already running)
+docker run -d --name registry --restart=always \
+  -p 5000:5000 -v /var/lib/registry:/var/lib/registry \
+  registry:2
+
+# Configure containerd mirror on ALL 3 nodes (catch-all redirect)
+# This sends ALL image pulls through the local registry
+for NODE in 192.168.1.159 192.168.1.158 192.168.1.156; do
+  ssh ice@$NODE "sudo mkdir -p /etc/containerd/certs.d/_default && sudo tee /etc/containerd/certs.d/_default/hosts.toml" <<'EOF'
+[host."http://192.168.1.159:5000"]
+  capabilities = ["pull", "resolve"]
+  skip_verify = true
+EOF
+done</code></pre>
+    <div class="alert alert-info">
+      <strong>Format note (G-04):</strong> <code>REGISTRY_IP=192.168.1.159:5000</code> (no scheme) is used for <code>nkp push bundle --to-registry</code>. <code>REGISTRY_MIRROR_URL=https://192.168.1.159:5000</code> (with scheme) is used for <code>nkp create cluster --registry-mirror-url</code>. These are different flags with different format requirements.
+    </div>
+  </div>
+
+  <h3>Phase 3 — Push Bundles</h3>
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-num">Phase 3</span>
+      <span class="phase-name">Push Konvoy + Kommander Bundles to Registry</span>
+      <span class="phase-status status-done">SCRIPTED</span>
+    </div>
+<pre><code class="language-bash">BUNDLE_DIR="$HOME/nkp-bundle/nkp-v2.17.1/container-images"
+REGISTRY_IP="192.168.1.159:5000"
+
+# Push Konvoy bundle (~11 GB)
+nkp push bundle \
+  --bundle "$BUNDLE_DIR/konvoy-image-bundle-v2.17.1.tar" \
+  --to-registry "$REGISTRY_IP" \
+  --to-registry-insecure-skip-tls-verify \
+  --image-push-concurrency 4
+
+# Push Kommander bundle (~11 GB) — needed for cert-manager charts (G-31)
+nkp push bundle \
+  --bundle "$BUNDLE_DIR/kommander-image-bundle-v2.17.1.tar" \
+  --to-registry "$REGISTRY_IP" \
+  --to-registry-insecure-skip-tls-verify \
+  --image-push-concurrency 4</code></pre>
+    <div class="alert alert-warn">
+      <strong>G-19:</strong> <code>nkp push bundle</code> uses an ephemeral internal staging registry on a random port. If it dies mid-push, the command exits 0 but images may be missing. Re-run once more — it is idempotent and skips already-pushed images.
+    </div>
+  </div>
+
+  <h3 id="ch-phases-bootstrap">Phase 4 — Bootstrap KIND Cluster</h3>
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-num">Phase 4</span>
+      <span class="phase-name">Create KIND Bootstrap Cluster</span>
+      <span class="phase-status status-done">SCRIPTED</span>
+    </div>
+<pre><code class="language-bash">BUNDLE_DIR="$HOME/nkp-bundle/nkp-v2.17.1"
+REGISTRY_MIRROR_URL="https://192.168.1.159:5000"
+
+# Bootstrap loads images from the extracted .tar files into KIND
+# Do NOT use --bundle here (G-18: creates inaccessible internal registry)
+nkp create bootstrap \
+  --bootstrap-cluster-image "$BUNDLE_DIR/konvoy-bootstrap-image-v2.17.1.tar" \
+  --registry-mirror-url "$REGISTRY_MIRROR_URL" \
+  --registry-mirror-insecure \
+  --registry-insecure-skip-tls-verify \
+  --kubeconfig ~/.kube/nkp-bootstrap.kubeconfig</code></pre>
+    <div class="alert alert-warn">
+      <strong>G-21:</strong> After bootstrap, if the KIND container restarts, the API port may change (e.g., 40047 → 38077). Extract a fresh kubeconfig: <code>docker exec konvoy-capi-bootstrapper-control-plane cat /etc/kubernetes/admin.conf | sed 's|https://.*:6443|https://127.0.0.1:NEW_PORT|g' > ~/.kube/nkp-bootstrap.kubeconfig</code>
+    </div>
+    <div class="alert alert-info">
+      <strong>G-26:</strong> After a KIND container restart, wait 2–3 minutes for the API server to become ready before running kubectl commands. Poll: <code>curl -sk https://127.0.0.1:38077/healthz</code>
+    </div>
+  </div>
+
+  <h3 id="ch-phases-cluster">Phase 5 — Create Target Cluster</h3>
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-num">Phase 5</span>
+      <span class="phase-name">nkp create cluster preprovisioned</span>
+      <span class="phase-status status-manual">PARTIAL MANUAL</span>
+    </div>
+<pre><code class="language-bash">KC="$HOME/nkp-bundle/nkp-v2.17.1/kubectl"
+KCF="--kubeconfig=$HOME/.kube/nkp-bootstrap.kubeconfig"
+VIP="192.168.1.100"
+REGISTRY_MIRROR_URL="https://192.168.1.159:5000"
+
+nkp create cluster preprovisioned \
+  --cluster-name nkp-cluster \
+  --control-plane-replicas 3 \
+  --worker-replicas 0 \
+  --control-plane-endpoint-host "$VIP" \
+  --control-plane-endpoint-port 6443 \
+  --ssh-username ice \
+  --ssh-private-key-file ~/.ssh/nkp_rsa \
+  --registry-mirror-url "$REGISTRY_MIRROR_URL" \
+  --registry-insecure-skip-tls-verify \
+  --self-managed \
+  --timeout 2h \
+  --kubeconfig ~/.kube/nkp-bootstrap.kubeconfig
+
+# CRITICAL: Patch SSH config into PreprovisionedInventory (G-22)
+for inv in nkp-cluster-control-plane nkp-cluster-md-0; do
+  "$KC" $KCF patch preprovisionedinventory "$inv" -n default --type=merge \
+    -p '{"spec":{"sshConfig":{"port":22,"user":"ice","privateKeyRef":{"name":"nkp-cluster-ssh-key","namespace":"default"}}}}'
+done
+
+# CRITICAL: Add NKP deploy key to authorized_keys on all nodes (G-23)
+NKP_PUBKEY=$("$KC" $KCF get secret nkp-cluster-ssh-key -n default \
+  -o jsonpath='{.data.ssh-privatekey}' | base64 -d | ssh-keygen -y -f /dev/stdin)
+echo "$NKP_PUBKEY nkp-deploy" >> ~/.ssh/authorized_keys
+for NODE in 192.168.1.158 192.168.1.156; do
+  sshpass -p 'PASSWORD' ssh -o StrictHostKeyChecking=no ice@$NODE \
+    "echo '$NKP_PUBKEY nkp-deploy' >> ~/.ssh/authorized_keys"
+done</code></pre>
+    <div class="alert alert-danger">
+      <strong>G-29 — VIP / kube-vip:</strong> kubeadm post-init phases fail because the VIP (192.168.1.100) is not routable. You must manually add the VIP to the NIC and run the failed kubeadm phases. kube-vip is not auto-deployed in pre-provisioned mode.
+    </div>
+<pre><code class="language-bash"># On 159, after kubeadm init completes but before post-init phases:
+sudo ip addr add 192.168.1.100/24 dev ens33
+sudo kubeadm init phase upload-certs --upload-certs --config /run/kubeadm/kubeadm.yaml
+sudo kubeadm init phase upload-config all --config /run/kubeadm/kubeadm.yaml
+sudo kubeadm init phase mark-control-plane --config /run/kubeadm/kubeadm.yaml
+sudo kubeadm init phase bootstrap-token --config /run/kubeadm/kubeadm.yaml
+sudo kubeadm init phase addon all --config /run/kubeadm/kubeadm.yaml
+sudo mkdir -p /run/cluster-api
+echo "success" | sudo tee /run/cluster-api/bootstrap-success.complete
+
+# Fix iptables after kube-proxy sets FORWARD=DROP (G-30)
+KIND_BR="br-$(docker network ls --filter name=kind --format '{{.ID}}' | cut -c1-12)"
+sudo iptables -t nat -A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE
+sudo iptables -t nat -A POSTROUTING -s 172.18.0.0/16 -j MASQUERADE
+sudo iptables -I FORWARD 1 -i "$KIND_BR" -j ACCEPT
+sudo iptables -I FORWARD 1 -o "$KIND_BR" -j ACCEPT</code></pre>
+  </div>
+
+  <h3>Phase 6 — Wait for All Nodes Ready</h3>
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-num">Phase 6</span>
+      <span class="phase-name">Monitor &amp; Wait for 3 CP Nodes Ready</span>
+      <span class="phase-status status-done">WATCH</span>
+    </div>
+<pre><code class="language-bash">KC="$HOME/nkp-bundle/nkp-v2.17.1/kubectl"
+# Watch from bootstrap cluster during provisioning
+$KC --kubeconfig ~/.kube/nkp-bootstrap.kubeconfig get machines -n default -w
+
+# After self-managed pivot, watch from target cluster
+$KC --kubeconfig ~/.kube/nkp-cluster.kubeconfig get nodes -w
+
+# Get cluster kubeconfig
+nkp get kubeconfig --cluster-name nkp-cluster \
+  --kubeconfig ~/.kube/nkp-bootstrap.kubeconfig \
+  > ~/.kube/nkp-cluster.kubeconfig</code></pre>
+  </div>
+
+  <h3 id="ch-phases-cni">Phase 7 — CNI + MetalLB</h3>
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-num">Phase 7</span>
+      <span class="phase-name">Networking — Calico CNI + MetalLB L2</span>
+      <span class="phase-status status-done">AUTO + CONFIG</span>
+    </div>
+    <p>Calico is deployed automatically via NKP's ClusterResourceSet when nodes join. MetalLB requires manual IPAddressPool configuration:</p>
+<pre><code class="language-yaml">apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: default-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - 192.168.1.200-192.168.1.220
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: default
+  namespace: metallb-system</code></pre>
+<pre><code class="language-bash"># Untaint control-plane nodes to allow workloads (no workers in this deploy)
+KC="$HOME/nkp-bundle/nkp-v2.17.1/kubectl"
+KCT="--kubeconfig ~/.kube/nkp-cluster.kubeconfig"
+$KC $KCT taint nodes --all node-role.kubernetes.io/control-plane- 2>/dev/null || true</code></pre>
+  </div>
+
+  <h3 id="ch-phases-kommander">Phase 8–10 — cert-manager + Kommander</h3>
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-num">Phase 8</span>
+      <span class="phase-name">Install cert-manager (manual prerequisite)</span>
+      <span class="phase-status status-manual">MANUAL</span>
+    </div>
+<pre><code class="language-bash">KC="$HOME/nkp-bundle/nkp-v2.17.1/kubectl"
+KCT="--kubeconfig ~/.kube/nkp-cluster.kubeconfig"
+REG="192.168.1.159:5000"
+
+helm install cert-manager-crds \
+  oci://$REG/mesosphere/charts/cert-manager-crds \
+  --version v1.18.2 --namespace cert-manager --create-namespace --plain-http \
+  --kubeconfig ~/.kube/nkp-cluster.kubeconfig
+
+helm install cert-manager \
+  oci://$REG/mesosphere/charts/cert-manager \
+  --version v1.18.2 --namespace cert-manager --plain-http \
+  --set global.priorityClassName=system-cluster-critical \
+  --kubeconfig ~/.kube/nkp-cluster.kubeconfig
+
+$KC $KCT wait --for=condition=Ready pods --all -n cert-manager --timeout=5m</code></pre>
+  </div>
+
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-num">Phase 9</span>
+      <span class="phase-name">Install Trimmed Kommander</span>
+      <span class="phase-status status-manual">MANUAL</span>
+    </div>
+<pre><code class="language-bash"># Run in tmux — takes 30-60 minutes
+tmux new-session -d -s kommander-install
+tmux send-keys -t kommander-install "
+nkp install kommander \
+  --airgapped \
+  --installer-config /home/ice/kommander-trimmed.yaml \
+  --kubeconfig ~/.kube/nkp-cluster.kubeconfig \
+  --kommander-applications-repository \
+    /home/ice/nkp-bundle/nkp-v2.17.1/application-repositories/kommander-applications-v2.17.1.tar.gz
+" Enter</code></pre>
+    <p>Trimmed Kommander config (<code>kommander-trimmed.yaml</code>) — apps enabled: <code>dex</code>, <code>dex-k8s-authenticator</code>, <code>git-operator</code>, <code>kommander</code>, <code>kommander-ui</code>, <code>reloader</code>, <code>traefik</code>, <code>traefik-forward-auth-mgmt</code>. All others (rook-ceph, prometheus, velero) disabled.</p>
+  </div>
+
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-num">Phase 10</span>
+      <span class="phase-name">Fix Air-Gap OCI URL References</span>
+      <span class="phase-status status-manual">MANUAL — POST-INSTALL</span>
+    </div>
+    <div class="alert alert-danger">
+      <strong>This is the most complex phase.</strong> See Chapter 4 (Flux Internals) and Gotchas G-35 through G-42 for the full procedure. Summary:
+      <ol style="margin-top:.5rem;padding-left:1.5rem;">
+        <li>Clone internal git-operator repo, replace all <code>ghcr.io</code> and <code>docker.io</code> OCI refs → <code>192.168.1.159:5000</code>, push (G-37, G-40)</li>
+        <li>Scale kommander-operator to 0, patch <code>platform-version-v2-17-1</code> + <code>kommander-appmanagement-0.17.1-chart</code> OCIRepositories, scale back (G-36, G-42)</li>
+        <li>Fix <code>RUNTIME_NAMESPACE</code> env conflict in source-controller (G-34, G-38)</li>
+        <li>Clear <code>catalogCollections</code> to remove port-number validation failure (G-39)</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- CHAPTER 4: FLUX INTERNALS -->
+<section class="content-section" id="ch-flux">
+  <h2 class="section-title"><span class="num">4</span>Flux &amp; Kommander Internals</h2>
+
+  <p>
+    Understanding who owns what is critical for debugging. Two different entities manage OCIRepository resources —
+    confusing them leads to chasing symptoms instead of root causes.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>OCIRepository</th>
+        <th>Owner</th>
+        <th>Source URL</th>
+        <th>Air-Gap Fix</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>platform-version-v2-17-1</code></td>
+        <td><strong>kommander-operator</strong> (hardcoded)</td>
+        <td class="danger">oci://ghcr.io/mesosphere/...</td>
+        <td>Race: scale op→0, patch URL, wait Ready=True, scale op→1</td>
+      </tr>
+      <tr>
+        <td><code>kommander-appmanagement-0.17.1-chart</code></td>
+        <td><strong>kommander-operator</strong> (via git repo)</td>
+        <td class="danger">oci://docker.io/mesosphere/...</td>
+        <td>Fix docker.io ref in git repo (G-40) + scale-0 race</td>
+      </tr>
+      <tr>
+        <td>Per-app chart repos (dex, traefik, etc.)</td>
+        <td><strong>kommander-appmanagement</strong></td>
+        <td class="ok">Already uses local registry (from apps tarball)</td>
+        <td>No action needed — auto-correct via apps tarball</td>
+      </tr>
+      <tr>
+        <td>All other resources in git repo</td>
+        <td><strong>Kustomization</strong> (Flux GitRepository)</td>
+        <td class="danger">oci://ghcr.io/... (original)</td>
+        <td>sed replacement in git repo commit (G-37)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>The OCI URL Fix Sequence</h3>
+<pre><code class="language-bash">K="~/nkp-bundle/nkp-v2.17.1/kubectl"
+KC="--kubeconfig ~/.kube/nkp-cluster.kubeconfig"
+
+# Step 1: Get git-operator credentials and clone
+GIT_PASS=$($K $KC get secret kommander-git-credentials -n kommander-flux \
+  -o jsonpath='{.data.password}' | base64 -d)
+GIT_IP=$($K $KC get svc git-operator-git -n git-operator-system \
+  -o jsonpath='{.spec.clusterIP}')
+GIT_URL="https://kommander:${GIT_PASS}@${GIT_IP}/repositories/kommander/kommander.git"
+GIT_SSL_NO_VERIFY=true git clone "$GIT_URL" /tmp/kommander-git
+cd /tmp/kommander-git
+
+# Step 2: Replace ALL external registry refs (both ghcr.io AND docker.io)
+find . -name "*.yaml" | xargs sed -i \
+  's|oci://ghcr.io/|oci://192.168.1.159:5000/|g;
+   s|image: ghcr.io/|image: 192.168.1.159:5000/|g;
+   s|oci://docker.io/|oci://192.168.1.159:5000/|g'
+
+# Step 3: Remove catalogCollections with port numbers (G-39)
+# Edit applications/kommander/0.17.1/helmrelease/cm.yaml manually
+# or patch the ConfigMap after Kommander installs
+
+git add -A && git commit -m "fix: redirect all OCI refs to local registry"
+GIT_SSL_NO_VERIFY=true git pull --rebase
+GIT_SSL_NO_VERIFY=true git push
+
+# Step 4: Fix platform-version-v2-17-1 (operator-owned, not in git repo)
+$K $KC scale deployment kommander-operator -n kommander --replicas=0
+$K $KC patch ocirepository platform-version-v2-17-1 -n kommander --type=merge \
+  -p '{"spec":{"url":"oci://192.168.1.159:5000/mesosphere/kommander-applications/collection","insecure":true,"ref":{"tag":"v2.17.1"},"suspend":false}}'
+sleep 15
+$K $KC scale deployment kommander-operator -n kommander --replicas=1</code></pre>
+
+  <h3>HelmRelease env conflict fix (G-38)</h3>
+<pre><code class="language-bash"># Remove manually-set env vars that conflict with chart's fieldRef
+$K $KC patch deployment source-controller -n kommander-flux --type=json \
+  -p='[{"op":"replace","path":"/spec/template/spec/containers/0/env","value":[
+    {"name":"NO_PROXY","value":"192.168.1.0/24,10.96.0.0/12,10.244.0.0/16,.cluster.local,localhost,127.0.0.1"},
+    {"name":"TUF_ROOT","value":"/tmp/.sigstore"}
+  ]}]'
+$K $KC patch deployment kustomize-controller -n kommander-flux --type=json \
+  -p='[{"op":"replace","path":"/spec/template/spec/containers/0/env","value":[]}]'
+$K $KC annotate helmrelease kommander-flux -n kommander --overwrite \
+  reconcile.fluxcd.io/requestedAt="$(date -u +%FT%TZ)"</code></pre>
+</section>
+
+<!-- CHAPTER 5: GOTCHAS -->
+<section class="content-section" id="ch-gotchas">
+  <h2 class="section-title"><span class="num">5</span>Gotcha Compendium</h2>
+  <p>42 issues discovered across 7 deploy sessions. Click any gotcha to expand the full details.</p>
+
+  <!-- GROUP: PRE-DEPLOY -->
+  <div class="gotcha-group">
+    <div class="gotcha-group-title">Bundle &amp; Preflight (G-01 to G-11)</div>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-01</span><span class="gtitle">NKP version is 2.17.1, not 2.17.0 — check before every deploy</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> Image tags and bundle names mismatch. Script had <code>v2.17.0</code>.</p>
+        <p><span class="tag fix">Fix</span> Always verify with <code>nkp version</code> before running. Updated script to <code>NKP_VERSION="v2.17.1"</code>.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-03</span><span class="gtitle">--bundle expects extracted .tar files, not the outer .tar.gz archive</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> The 22 GB <code>.tar.gz</code> must be fully extracted first. The <code>--bundle</code> flag consumes individual <code>.tar</code> archives inside it. <code>tar -tzf</code> listing over SSH times out — extract first.</p>
+        <p><span class="tag fix">Fix</span> Extract to <code>~/nkp-bundle/</code> via <code>nohup tar -xzf ... &amp;</code> — takes ~20-30 min.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-04</span><span class="gtitle">External registry required — bootstrap in-cluster registry is not reachable</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> <code>--registry-mirror-url</code> must point to a registry reachable by all target nodes. The bootstrap's in-cluster registry runs inside KIND pods with no external NodePort.</p>
+        <p><span class="tag fix">Fix</span> Stand up <code>registry:2</code> on 192.168.1.159:5000 and use <code>nkp push bundle --to-registry</code>.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-08</span><span class="gtitle">Swap is ON by default on Ubuntu 24.04 — kubelet refuses to start</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> kubelet refuses to start with swap enabled. NKP does not set the required feature gate.</p>
+        <p><span class="tag fix">Fix</span> <code>swapoff -a</code> + comment out swap in <code>/etc/fstab</code> before bootstrap.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-11</span><span class="gtitle">~ tilde does not expand inside comma-separated --bundle string</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> Shell only expands <code>~</code> at the start of a word. The second path after the comma is not a new word — stays as literal <code>~/path...</code>.</p>
+        <p><span class="tag fix">Fix</span> Use <code>$HOME</code> for all paths in comma-separated flags.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-17</span><span class="gtitle">nkp push bundle exits 0 but images may be partially pushed</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> The ephemeral staging registry dies mid-push, command exits 0 despite partial failures. Subsequent pulls fail with connection refused to the ephemeral port.</p>
+        <p><span class="tag fix">Fix</span> Re-run <code>nkp push bundle</code> — idempotent, skips already-pushed images. Run twice if needed.</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- GROUP: SSH + NODES -->
+  <div class="gotcha-group">
+    <div class="gotcha-group-title">SSH &amp; Node Connectivity (G-05, G-06, G-12, G-15, G-16)</div>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-05</span><span class="gtitle">--ssh-username defaults to "konvoy" — must pass your actual OS user</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> NKP tries to create an OS user called "konvoy" — fails silently if it can't, hangs SSH bootstrap.</p>
+        <p><span class="tag fix">Fix</span> Always pass <code>--ssh-username ice</code> (or your actual user) explicitly.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-06</span><span class="gtitle">SSH user must have passwordless sudo (NOPASSWD) on all nodes</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> NKP uses SSH to run privileged operations. Without NOPASSWD, install hangs waiting for a password prompt that never arrives.</p>
+        <p><span class="tag fix">Fix</span> <code>echo 'ice ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/nkp-ice && chmod 440 /etc/sudoers.d/nkp-ice</code> on all 3 nodes.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-12</span><span class="gtitle">SSH auth hangs on Ubuntu 24.04 — PAM stall (UsePAM yes)</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> <code>nc</code> connects instantly, SSH banner returns, but all auth attempts time out at 25-30 s. Common on Ubuntu 24.04 with PAM modules trying to contact unavailable services (systemd-resolved, SSSD, pam_motd).</p>
+        <p><span class="tag fix">Fix</span> <code>sed -i 's/^UsePAM yes/UsePAM no/' /etc/ssh/sshd_config && systemctl restart sshd</code></p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-15</span><span class="gtitle">authorized_keys line-wrap corrupts key on terminal paste</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> <code>echo "key" >> authorized_keys</code> wraps at terminal width → 2 lines → auth fails with <code>[preauth]</code> close.</p>
+        <p><span class="tag fix">Fix</span> Use <code>printf 'key\n' > authorized_keys</code> or pipe via <code>scp</code>.</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- GROUP: CAPI + PROVISIONING -->
+  <div class="gotcha-group">
+    <div class="gotcha-group-title">CAPI / Provisioning (G-18 to G-30)</div>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-18</span><span class="gtitle">--bundle on bootstrap does NOT create an external-accessible registry</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> Bundle images loaded into KIND's internal containerd only. External nodes can't reach them. <code>--registry-mirror-url</code> and <code>--bundle</code> cannot be used together (error).</p>
+        <p><span class="tag fix">Fix</span> Do NOT use <code>--bundle</code> on bootstrap. Use a separate Docker registry and <code>nkp push bundle</code>.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-20</span><span class="gtitle">PreprovisionedInventory uses D2iQ's own API group, not upstream CAPI</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> Using <code>cluster.x-k8s.io</code> fails with "no matches for kind PreprovisionedInventory". Even with <code>--worker-replicas 0</code>, must include a worker inventory with <code>hosts: []</code>.</p>
+        <p><span class="tag fix">Fix</span> Use <code>apiVersion: infrastructure.cluster.konvoy.d2iq.io/v1alpha1</code></p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-22</span><span class="gtitle">--ssh-private-key-file creates the Secret but does NOT wire it into PreprovisionedInventory</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> cappp logs: <code>"failed to get sshConfig secret: Secret \"\" not found"</code> — empty string secret name. Cluster stuck at WaitingForBootstrapData.</p>
+        <p><span class="tag fix">Fix</span> After cluster create, patch both PreprovisionedInventory objects with <code>spec.sshConfig.privateKeyRef.name: nkp-cluster-ssh-key</code>.</p>
+<pre><code class="language-bash">KC="--kubeconfig=$HOME/.kube/nkp-bootstrap.kubeconfig"
+for inv in nkp-cluster-control-plane nkp-cluster-md-0; do
+  kubectl $KC patch preprovisionedinventory "$inv" -n default --type=merge \
+    -p '{"spec":{"sshConfig":{"port":22,"user":"ice","privateKeyRef":{"name":"nkp-cluster-ssh-key","namespace":"default"}}}}'
+done</code></pre>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-24</span><span class="gtitle">NIB provision fails: NO_PUBKEY for pkgs.k8s.io apt repo</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> NIBFailed on all 3 machines. First Ansible task <code>apt-get update</code> fails with <code>NO_PUBKEY 234654DA9A296436</code>.</p>
+        <p><span class="tag fix">Fix</span> Import GPG key on all nodes before cluster create: <code>curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg</code></p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-25</span><span class="gtitle">nkp create cluster --self-managed timeout removes docker-ce and kills bootstrap cluster</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> After ~45 min timeout, NKP ran cleanup: removed KIND container AND <code>apt-get remove docker-ce</code>. Docker daemon stopped. All kubectl fails with "connection refused".</p>
+        <p><span class="tag fix">Fix</span> Always use <code>--timeout 2h</code>. Recovery: reinstall docker-ce, create systemd unit, restart — KIND containers auto-restart.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-27</span><span class="gtitle">NIB apt-get remove containerd.io kills bootstrap KIND cluster — circular dependency</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> On the bootstrap node (159), containerd.io backs Docker, which backs KIND, which runs the NIB pod. When apt's prerm script runs <code>systemctl stop containerd</code>, the entire chain dies.</p>
+        <p><span class="tag fix">Fix</span> Neuter dpkg prerm scripts for containerd.io and docker-ce on 159. Enable Docker live-restore. Pre-remove containerd.io manually before NIB runs (G-28 extension).</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-29</span><span class="gtitle">kubeadm init post-phases fail: VIP unreachable — kube-vip not auto-deployed</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> kubeadm certs and API server start OK but post-init phases (upload-config, mark-control-plane, addon) fail: <code>dial tcp 192.168.1.100:6443: no route to host</code>. <code>bootstrap-success.complete</code> never written.</p>
+        <p><span class="tag fix">Fix</span> Manually: <code>sudo ip addr add 192.168.1.100/24 dev ens33</code> then run the 5 failed kubeadm phases + write the success file. For production: deploy kube-vip static pod before cluster create.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-30</span><span class="gtitle">kube-proxy sets FORWARD=DROP blocking bootstrap→CP2/CP3 SSH traffic</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> After kubeadm init starts kube-proxy, iptables FORWARD policy becomes DROP. KIND bridge traffic to external hosts is blocked. cappp can't SSH to CP2/CP3 — NIB jobs never created.</p>
+        <p><span class="tag fix">Fix</span> After kubeadm init: restore Docker NAT MASQUERADE rules and insert FORWARD ACCEPT rules for the KIND bridge interface.</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- GROUP: KOMMANDER / FLUX -->
+  <div class="gotcha-group">
+    <div class="gotcha-group-title">Kommander &amp; Flux (G-31 to G-42)</div>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-31</span><span class="gtitle">Kommander pre-flight fails: cert-manager not installed (not auto-deployed in pre-provisioned mode)</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> <code>nkp install kommander --airgapped</code> hard-stops: "cert-manager is not installed". In cloud mode, cert-manager is deployed via ClusterResourceSet during cluster creation. Pre-provisioned mode skips this.</p>
+        <p><span class="tag fix">Fix</span> Push Kommander bundle first (contains cert-manager chart), then install cert-manager via Helm from local registry before running Kommander install.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-32</span><span class="gtitle">--airgapped still fetches kommander-applications from GitHub</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> Despite <code>--airgapped</code>, installer tries <code>https://github.com/mesosphere/kommander-applications/archive/.../v2.17.1.tar.gz</code> — DNS timeout.</p>
+        <p><span class="tag fix">Fix</span> Pass <code>--kommander-applications-repository /home/ice/nkp-bundle/nkp-v2.17.1/application-repositories/kommander-applications-v2.17.1.tar.gz</code> (local filesystem path).</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-33</span><span class="gtitle">local-volume-provisioner requires bind mounts, not plain directories</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> git-operator PVCs stuck Pending. Provisioner validates paths against <code>/proc/mounts</code> — plain <code>mkdir</code> directories rejected.</p>
+        <p><span class="tag fix">Fix</span> <code>mount --bind /mnt/disks/vol-01 /mnt/disks/vol-01</code> on each volume dir on all 3 nodes. Creates 9 PVs (3 per node).</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-34</span><span class="gtitle">source-controller RUNTIME_NAMESPACE env not set — artifact URLs contain literal $(RUNTIME_NAMESPACE)</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> GitRepository status URLs contain <code>$(RUNTIME_NAMESPACE)</code> unexpanded. kustomize-controller DNS lookup fails: <code>no such host: source-controller.$(RUNTIME_NAMESPACE).svc.cluster.local.</code></p>
+        <p><span class="tag fix">Fix</span> Temporary: <code>kubectl set env deployment/source-controller -n kommander-flux RUNTIME_NAMESPACE=kommander-flux</code>. Long-term: let kommander-flux HelmRelease apply (sets fieldRef correctly).</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-35</span><span class="gtitle">flux-oci-mirror TLS MITM certs missing — proxy completely non-functional</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> All OCI pulls fail. flux-oci-mirror needs MITM certs (MITMCertFile, MITMKeyFile, ProxyCAFile) that are auto-generated during cloud provisioning — absent in pre-provisioned mode. <code>flux-oci-mirror-config</code> secret has all cert paths as empty strings.</p>
+        <p><span class="tag fix">Fix</span> Bypass entirely: patch OCIRepository resources to point directly to local registry with <code>insecure: true</code>.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-36</span><span class="gtitle">kommander-operator reconciles OCIRepository URLs back to external registries</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> Patching <code>platform-version-v2-17-1</code> and <code>kommander-appmanagement-0.17.1-chart</code> OCIRepositories immediately reverts — operator owns them and re-creates with hardcoded external URLs.</p>
+        <p><span class="tag fix">Fix</span> Scale operator to 0, patch both resources, wait for Ready=True (≈30s), scale back to 1. Operator sees Ready=True and advances past the blocking state before reverting.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-37</span><span class="gtitle">git-operator repo has hardcoded ghcr.io URLs in all manifests</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> All HelmRelease <code>chartRef</code> and OCIRepository <code>url</code> fields reference <code>oci://ghcr.io/mesosphere/...</code>. Kustomization applies these manifests — everything fails.</p>
+        <p><span class="tag fix">Fix</span> Clone internal git repo with credentials, <code>sed -i</code> replace all ghcr.io and docker.io refs with <code>192.168.1.159:5000</code>, commit and push. Use <code>GIT_SSL_NO_VERIFY=true</code> (self-signed cert).</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-38</span><span class="gtitle">kommander-flux HelmRelease conflicts with manually-set env vars (value vs valueFrom)</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> Chart sets <code>RUNTIME_NAMESPACE</code> via <code>valueFrom.fieldRef</code>. Manual patch set it with static <code>value</code>. Kubernetes rejects env vars that have both — HelmRelease stuck with <code>Invalid value: "": may not be specified when value is not empty</code>.</p>
+        <p><span class="tag fix">Fix</span> Remove all manual env overrides from source-controller and kustomize-controller (replace entire env array), then force-reconcile kommander-flux HelmRelease.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-39</span><span class="gtitle">--catalog-collections flag rejects registry URLs with port numbers (colon validation)</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> <code>kommander-cm</code> pod CrashLoopBackOff (exit 2): <code>flag --catalog-collections: invalid repository portion in URL</code>. Validation regex <code>^[a-z0-9_\-./]+$</code> rejects colons — port number <code>:5000</code> fails.</p>
+        <p><span class="tag fix">Fix</span> Patch <code>kommander-0.17.1-config-defaults</code> ConfigMap: <code>data.values.yaml: "catalogCollections: []\n"</code>. Also patch running Deployment to remove the arg.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-40</span><span class="gtitle">git repo sed missed docker.io OCI chart refs — only replaced ghcr.io</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> Two HelmRelease files define their OCIRepository source with <code>oci://docker.io/mesosphere/...</code>. The G-37 sed command only replaced <code>ghcr.io</code>. Operator creates OCIRepositories with docker.io URLs that fail.</p>
+        <p><span class="tag fix">Fix</span> Additional sed for docker.io in the git repo: <code>s|oci://docker.io/|oci://192.168.1.159:5000/|g</code>. Commit with <code>GIT_SSL_NO_VERIFY=true git pull --rebase</code> before push.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-41</span><span class="gtitle">Flux upgrade via kommander-flux HelmRelease wipes all manually-patched OCIRepository URLs</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> Reconciling <code>kommander-flux</code> upgrades Flux, restarting all controllers. Operators re-reconcile and write back external URLs. All manual patches are lost.</p>
+        <p><span class="tag fix">Fix</span> Fix all OCI URL refs in the git repo (G-37 + G-40) BEFORE the first kommander-flux reconcile. For operator-owned resources, use the scale-0 race (G-42). Git-based fixes survive Flux restarts; manual patches don't.</p>
+      </div>
+    </details>
+
+    <details class="gotcha">
+      <summary><span class="gid">G-42</span><span class="gtitle">platform-version-v2-17-1: operator manages to ghcr.io, no registry URL configured for air-gap</span><span class="arrow">▶</span></summary>
+      <div class="gotcha-body">
+        <p><span class="tag impact">Impact</span> KommanderCore stuck at <code>PlatformVersionArtifactCreated: False</code> indefinitely. <code>KommanderCore</code> CRD has no registry field — operator has Airgapped feature gate but no URL to use, falls back to ghcr.io. Also reverts <code>spec.suspend: true</code>.</p>
+        <p><span class="tag fix">Fix</span> Race: scale operator→0, patch OCIRepository URL to local registry with <code>suspend:false</code>, wait 15s for Ready=True, scale operator→1. Operator sees Ready and marks <code>PlatformVersionArtifactCreated=True</code> before reverting.</p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- CHAPTER 6: DASHBOARD ACCESS -->
+<section class="content-section" id="ch-dashboard">
+  <h2 class="section-title"><span class="num">6</span>Dashboard Access</h2>
+
+  <p>
+    The Kommander dashboard at <code>https://192.168.1.200/dkp/kommander/dashboard</code> is on a private LAN.
+    Accessing it from a Windows workstation requires an SSH tunnel + Python reverse proxy to handle the Dex OIDC
+    authentication flow (which involves HTTP redirects to <code>192.168.1.200</code>).
+  </p>
+
+  <h3>Dex Authentication Flow</h3>
+  <div class="diagram-container">
+    <h4>OAuth2 / Dex OIDC Flow Through Proxy</h4>
+    <div class="mermaid">
+sequenceDiagram
+    participant B as Browser (Windows)
+    participant P as Python Proxy<br/>localhost:8888
+    participant T as SSH Tunnel<br/>127.0.0.1→192.168.1.200
+    participant D as Dashboard<br/>192.168.1.200:443
+    participant Dex as Dex OIDC<br/>/dex/auth
+
+    B->>P: GET http://localhost:8888/dkp/...
+    P->>T: Forward request (rewrites Host header)
+    T->>D: HTTPS to 192.168.1.200
+    D->>T: 302 Location: https://192.168.1.200/dex/auth?...
+    T-->>P: Response with redirect
+    P->>P: Rewrite Location header<br/>192.168.1.200 → localhost:8888
+    P->>P: Strip Set-Cookie: Domain=192.168.1.200<br/>(browser rejects cross-domain cookies)
+    P-->>B: 302 Location: http://localhost:8888/dex/auth?...
+    B->>P: Follow redirect (cookie retained)
+    P->>D: Forward to Dex
+    D-->>B: Login form / token
+    </div>
+  </div>
+
+  <h3>Setup</h3>
+<pre><code class="language-bash"># Step 1: SSH tunnel on Windows (PowerShell or terminal)
+ssh -L 8888:192.168.1.200:443 -N ice@192.168.1.159
+
+# Step 2: Start Python reverse proxy on 159
+# The proxy rewrites Location headers and strips cookie domain/secure attributes</code></pre>
+
+<pre><code class="language-python">#!/usr/bin/env python3
+# nkp-proxy.py — run on 192.168.1.159
+import http.server, urllib.request, urllib.error, ssl, re, socket, sys
+
+TARGET = "https://192.168.1.200"
+LOCAL  = "http://localhost:8888"
+PORT   = 8888
+
+class ProxyHandler(http.server.BaseHTTPRequestHandler):
+    def do_request(self, method):
+        url = TARGET + self.path
+        body = None
+        if method in ("POST", "PUT", "PATCH"):
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length) if length else None
+        headers = {k: v for k, v in self.headers.items()
+                   if k.lower() not in ("host", "connection", "transfer-encoding")}
+        headers["Host"] = "192.168.1.200"
+        req = urllib.request.Request(url, data=body, headers=headers, method=method)
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        try:
+            with urllib.request.urlopen(req, context=ctx) as resp:
+                self.send_response(resp.status)
+                for k, v in resp.headers.items():
+                    if k.lower() == "location":
+                        v = v.replace(TARGET, LOCAL)
+                    if k.lower() == "set-cookie":
+                        v = re.sub(r';\s*[Ss]ecure\b', '', v)
+                        v = re.sub(r';\s*[Ss]ame[Ss]ite=[A-Za-z]+', '', v)
+                        v = re.sub(r';\s*[Dd]omain=[^;,\s]+', '', v)
+                    if k.lower() not in ("transfer-encoding",):
+                        self.send_header(k, v)
+                self.end_headers()
+                self.wfile.write(resp.read())
+        except urllib.error.HTTPError as e:
+            self.send_response(e.code)
+            for k, v in e.headers.items():
+                if k.lower() == "location":
+                    v = v.replace(TARGET, LOCAL)
+                if k.lower() not in ("transfer-encoding",):
+                    self.send_header(k, v)
+            self.end_headers()
+        except Exception as ex:
+            self.send_error(502, str(ex))
+    def log_message(self, fmt, *args): pass
+    do_GET = do_POST = do_PUT = do_DELETE = do_PATCH = do_HEAD = do_request
+
+httpd = http.server.HTTPServer(("127.0.0.1", PORT), ProxyHandler)
+print(f"Proxy running on {LOCAL}", flush=True)
+httpd.serve_forever()</code></pre>
+
+<pre><code class="language-bash"># Run proxy on 159 (in background or tmux)
+python3 /tmp/nkp-proxy.py &
+
+# Get credentials
+kubectl get secret dkp-credentials -n kommander \
+  -o jsonpath='{.data.password}' | base64 -d
+# Username: boring_volhard
+
+# Then open in browser on Windows:
+# http://localhost:8888/dkp/kommander/dashboard</code></pre>
+
+  <div class="alert alert-warn">
+    <strong>Why strip Domain= from cookies?</strong> The cookie is set with <code>Domain=192.168.1.200</code>. When the browser receives it from <code>localhost:8888</code>, the domain mismatch causes the cookie to be silently discarded — resulting in "Not Authorized" on every page despite successful login. Stripping the Domain attribute lets the browser accept and send the cookie for any origin.
+  </div>
+</section>
+
+<!-- CHAPTER 7: FINAL STATE -->
+<section class="content-section" id="ch-final">
+  <h2 class="section-title"><span class="num">7</span>Final Cluster State</h2>
+
+  <div class="alert alert-success">
+    <strong>Installation Complete</strong> — All 20 HelmReleases True. KommanderCore InstallSucceeded=True. Dashboard accessible.
+  </div>
+
+  <h3>Nodes</h3>
+  <div class="node-card">
+    <div class="node-dot"></div>
+    <div>
+      <div class="node-name">nkp-bm-01 — 192.168.1.159</div>
+      <div class="node-detail">v1.34.3 · containerd://1.7.29-d2iq.1 · Bootstrap + CP1</div>
+    </div>
+    <div class="node-role">control-plane</div>
+  </div>
+  <div class="node-card">
+    <div class="node-dot"></div>
+    <div>
+      <div class="node-name">nkp-bm-03 — 192.168.1.158</div>
+      <div class="node-detail">v1.34.3 · containerd://1.7.29-d2iq.1</div>
+    </div>
+    <div class="node-role">control-plane</div>
+  </div>
+  <div class="node-card">
+    <div class="node-dot"></div>
+    <div>
+      <div class="node-name">nkp-bm-002 — 192.168.1.156</div>
+      <div class="node-detail">v1.34.3 · containerd://1.7.29-d2iq.1</div>
+    </div>
+    <div class="node-role">control-plane</div>
+  </div>
+
+  <h3>Networking</h3>
+  <table>
+    <tbody>
+      <tr><td><strong>VIP (API + Dashboard)</strong></td><td><code>192.168.1.200</code> — kube-vip ARP + MetalLB L2</td></tr>
+      <tr><td><strong>MetalLB Pool</strong></td><td><code>192.168.1.200 – 192.168.1.220</code></td></tr>
+      <tr><td><strong>Pod CIDR</strong></td><td><code>10.244.0.0/16</code> (Calico)</td></tr>
+      <tr><td><strong>Service CIDR</strong></td><td><code>10.96.0.0/12</code></td></tr>
+      <tr><td><strong>Local Registry</strong></td><td><code>192.168.1.159:5000</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Kommander Apps (Enabled)</h3>
+  <table>
+    <thead><tr><th>App</th><th>Namespace</th><th>Status</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>traefik</td><td>kommander</td><td class="ok">True</td><td>Ingress controller — exposes dashboard at VIP:443</td></tr>
+      <tr><td>dex</td><td>kommander</td><td class="ok">True</td><td>OIDC identity provider</td></tr>
+      <tr><td>dex-k8s-authenticator</td><td>kommander</td><td class="ok">True</td><td>Kubernetes OIDC login helper</td></tr>
+      <tr><td>traefik-forward-auth-mgmt</td><td>kommander</td><td class="ok">True</td><td>OAuth2 proxy — protects dashboard routes</td></tr>
+      <tr><td>kommander</td><td>kommander</td><td class="ok">True</td><td>Core management UI backend</td></tr>
+      <tr><td>kommander-ui</td><td>kommander</td><td class="ok">True</td><td>Dashboard frontend</td></tr>
+      <tr><td>git-operator</td><td>git-operator-system</td><td class="ok">True</td><td>Internal GitOps repository server</td></tr>
+      <tr><td>reloader</td><td>kommander</td><td class="ok">True</td><td>Auto-rolls deployments on ConfigMap/Secret change</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Dashboard Access</h3>
+  <table>
+    <tbody>
+      <tr><td><strong>URL</strong></td><td><code>https://192.168.1.200/dkp/kommander/dashboard</code></td></tr>
+      <tr><td><strong>Username</strong></td><td><code>boring_volhard</code></td></tr>
+      <tr><td><strong>Password</strong></td><td><em>Retrieved from</em> <code>kubectl get secret dkp-credentials -n kommander -o jsonpath='{.data.password}' | base64 -d</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="alert alert-info">
+    <strong>Key files in this repo:</strong><br>
+    <code>nkp-deploy.sh</code> — scripted deploy phases with all fixes incorporated<br>
+    <code>GOTCHAS.md</code> — live log of all 42 issues with fixes and root causes<br>
+    <code>kommander-trimmed.yaml</code> — working Kommander install config (trimmed app set)
+  </div>
+</section>
+
+</div><!-- #main -->
+
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'dark',
+  themeVariables: {
+    background: '#0d1117',
+    primaryColor: '#1f6feb',
+    primaryTextColor: '#e6edf3',
+    primaryBorderColor: '#30363d',
+    lineColor: '#58a6ff',
+    secondaryColor: '#21262d',
+    tertiaryColor: '#161b22',
+    edgeLabelBackground: '#161b22',
+    clusterBkg: '#161b22',
+    clusterBorder: '#30363d',
+    titleColor: '#e6edf3',
+    nodeTextColor: '#e6edf3',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    fontSize: '13px',
+    sequenceNumberColor: '#58a6ff',
+    activationBorderColor: '#58a6ff',
+    activationBkgColor: '#1f6feb',
+    actorBorder: '#30363d',
+    actorBkg: '#21262d',
+    actorTextColor: '#e6edf3',
+    actorLineColor: '#30363d',
+    signalColor: '#e6edf3',
+    signalTextColor: '#e6edf3',
+    labelBoxBkgColor: '#21262d',
+    labelBoxBorderColor: '#30363d',
+    labelTextColor: '#e6edf3',
+    loopTextColor: '#e6edf3',
+    noteBorderColor: '#30363d',
+    noteBkgColor: '#21262d',
+    noteTextColor: '#e6edf3',
+    messageFontWeight: 'normal'
+  },
+  flowchart: { curve: 'basis', useMaxWidth: true },
+  sequence: { useMaxWidth: true, mirrorActors: false }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  hljs.highlightAll();
+
+  // Active sidebar link tracking
+  const sections = document.querySelectorAll('[id]');
+  const links = document.querySelectorAll('#sidebar a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`#sidebar a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+});
+</script>
+</body>
+</html>
