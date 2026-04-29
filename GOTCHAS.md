@@ -191,13 +191,113 @@ key mismatch making the server reject the key silently while waiting for another
 
 ---
 
-## SESSION CHECKPOINT — 2026-04-29 (pre-compaction)
+## G-17 — `~` tilde does not expand inside comma-separated `--bundle` string
 
-**Done:**
-- 159: swap off, kernel modules, sysctl, containerd v2.2.3 configured + mirrors, sudo NOPASSWD, SSH key at ~/.ssh/nkp_rsa
-- 156 (nkp-bm-002): swap off, kernel modules, sysctl, sudo NOPASSWD, SSH key installed, registry mirror hosts.toml pre-created, no containerd (NKP will install)
-- 158 (nkp-bm-03): rebooting — SSH key mismatch fixed, sudo NOT yet set, prereqs NOT yet run
-- Bundle extracted to ~/nkp-bundle/nkp-v2.17.1/ on 159
+**Discovered:** `nkp create bootstrap --bundle ~/path/a.tar,~/path/b.tar`
+**Impact:** Shell only expands `~` at the start of a word. The second path after the comma is not a new word — it stays as `~/path/b.tar` literally. `nkp` reports "no files found matching pattern `~/path/...`".
+**Fix:** Use `$HOME` for all paths in comma-separated flags:
+```bash
+--bundle $HOME/nkp-bundle/.../konvoy-image-bundle.tar,$HOME/nkp-bundle/.../kommander-image-bundle.tar
+```
+
+---
+
+## G-18 — `nkp create bootstrap --bundle` does NOT create an accessible external registry
+
+**Discovered:** After bootstrap with `--bundle`, `kubectl get svc -A` in the bootstrap cluster shows only ClusterIP services. No NodePort or hostNetwork registry.
+**Impact:** The bundle images are loaded into the KIND node's internal containerd only. External nodes (158, 156) cannot reach the bootstrap registry. The `--registry-mirror-url` flag on `nkp create cluster preprovisioned` conflicts with the `--bundle` state, producing:
+`err="flags --registry-mirror-url and --bundle cannot be provided together"`
+**Fix:** Do NOT use `--bundle` on `nkp create bootstrap`. Instead:
+1. `nkp create bootstrap --bootstrap-cluster-image <tar>` (no `--bundle`)
+2. Stand up a Docker `registry:2` container on 159:5000
+3. `nkp push bundle --bundle <tar> --to-registry http://localhost:5000 --to-registry-insecure-skip-tls-verify`
+4. `nkp create cluster preprovisioned --registry-mirror-url http://192.168.1.159:5000`
+
+---
+
+## G-19 — `nkp push bundle` uses an ephemeral internal registry that can die mid-push
+
+**Discovered:** `nkp push bundle` (mindthegap) starts a temporary OCI registry on a random ephemeral port (observed: 46249) for image staging, then tears it down. If the ephemeral registry dies before all images are pushed, subsequent images fail with:
+`dial tcp 127.0.0.1:46249: connect: connection refused`
+The command exits 0 despite partial failures.
+**Fix:** Re-run `nkp push bundle` — it is idempotent and will skip already-pushed images. Run twice if necessary. Verify with `curl -s http://localhost:5000/v2/_catalog`.
+
+---
+
+## G-20 — PreprovisionedInventory API group is `infrastructure.cluster.konvoy.d2iq.io`, not `infrastructure.cluster.x-k8s.io`
+
+**Discovered:** dry-run of `nkp create cluster preprovisioned --pre-provisioned-inventory-file`
+**Impact:** Using the upstream CAPI API group (`cluster.x-k8s.io`) fails with "no matches for kind PreprovisionedInventory". NKP uses D2iQ's own API group.
+**Fix:** Inventory file header:
+```yaml
+apiVersion: infrastructure.cluster.konvoy.d2iq.io/v1alpha1
+kind: PreprovisionedInventory
+```
+Also: even with `--worker-replicas 0`, you must include a PreprovisionedInventory for the worker nodepool (`nkp-cluster-md-0`) with `hosts: []` or the command errors.
+
+---
+
+## G-21 — `nkp create cluster --self-managed` replaces bootstrap, shifts its port
+
+**Discovered:** After `nkp create bootstrap` + `nkp create cluster preprovisioned --self-managed`, the KIND container API port changes (e.g. 40047 → 38077). The kubeconfig at `~/.kube/nkp-bootstrap.kubeconfig` still points to the old port → all `kubectl` calls fail with connection refused.
+**Fix:** Extract fresh kubeconfig from the running KIND container:
+```bash
+docker exec konvoy-capi-bootstrapper-control-plane cat /etc/kubernetes/admin.conf \
+  | sed 's|https://.*:6443|https://127.0.0.1:38077|g' > ~/.kube/nkp-bootstrap.kubeconfig
+```
+Find current port with: `docker ps --format '{{.Names}} {{.Ports}}' | grep bootstrapper`
+
+---
+
+## G-22 — `--ssh-private-key-file` creates the SSH secret but does NOT wire it into PreprovisionedCluster/Template sshConfig
+
+**Discovered:** CAREN logs show `"failed to get sshConfig secret: Secret \"\" not found"` — empty string secret name — despite `--ssh-private-key-file ~/.ssh/nkp_rsa` being passed.
+**Impact:** PreprovisionedMachine controller cannot SSH into nodes. Cluster stuck at `WaitingForBootstrapData` indefinitely.
+**Root cause:** `nkp create cluster preprovisioned` creates secret `nkp-cluster-ssh-key` (with `ssh-privatekey` + `ssh-publickey` data keys) but leaves `sshConfig.secretName` empty in the PreprovisionedCluster, PreprovisionedMachineTemplate, and PreprovisionedMachine objects.
+**Fix:** After cluster create, patch all three objects:
+```bash
+KC="$HOME/nkp-bundle/nkp-v2.17.1/kubectl"
+KCF="--kubeconfig=$HOME/.kube/nkp-bootstrap.kubeconfig"
+for obj in \
+  "preprovisionedmachine/nkp-cluster-control-plane-md7lg" \
+  "preprovisionedmachinetemplate/nkp-cluster-control-plane" \
+  "preprovisionedmachinetemplate/nkp-cluster-md-0"; do
+  "$KC" $KCF patch "$obj" -n default --type=merge \
+    -p '{"spec":{"sshConfig":{"secretName":"nkp-cluster-ssh-key"}}}'
+done
+"$KC" $KCF patch preprovisionedcluster nkp-cluster -n default --type=merge \
+  -p '{"spec":{"sshConfig":{"secretName":"nkp-cluster-ssh-key"}}}'
+```
+**Note:** PreprovisionedMachine spec sshConfig path may differ — verify with `kubectl get preprovisionedmachine -o yaml` before patching.
+
+---
+
+## SESSION CHECKPOINT — 2026-04-29 session 2
+
+**Completed this session:**
+- All 3 nodes prereqs done (158 confirmed healthy post-reboot)
+- Bundle extracted: `~/nkp-bundle/nkp-v2.17.1/` on 159
+- Bootstrap created (no --bundle): KIND cluster on 159, kubeconfig `~/.kube/nkp-bootstrap.kubeconfig` → port 38077
+- External registry: `registry:2` container on 159:5000 with 100 images (konvoy + kommander pushed via `nkp push bundle`)
+- `nkp create cluster preprovisioned --self-managed` launched in tmux session `cluster-create` on 159
+- Cluster stuck: PreprovisionedMachine can't get SSH secret (G-22 above)
+- Patches applied to PreprovisionedMachineTemplate + PreprovisionedCluster; PreprovisionedMachine direct patch pending verification
+
+**Current state:**
+- tmux: `cluster-create` running `nkp create cluster` → `~/cluster-create.log` (39 lines, stuck at "Waiting for cluster infrastructure to be ready...")
+- Bootstrap kubeconfig: `~/.kube/nkp-bootstrap.kubeconfig` → `https://127.0.0.1:38077`
+- CAREN pod: `nkp-system/caren-controller-manager-5d46f9979d-w2h6n`
+- SSH secret: `nkp-cluster-ssh-key` in `default` ns, has `ssh-privatekey` + `ssh-publickey`
+- Script ready: `/tmp/full-spec.sh` on 159 — run to get PreprovisionedMachine full yaml + CAREN logs
+
+**Next on resume:**
+1. Run `bash /tmp/full-spec.sh` on 159 to verify patch took effect + check if CAREN SSH errors cleared
+2. If sshConfig still empty after patch: check exact spec field path from the yaml, re-patch correctly
+3. Once SSH secret wired: CAREN will SSH into 159 → install containerd from bundle → run kubeadm init
+4. Monitor machines joining (158, 156 next)
+5. Wait for `EXIT:0` in `~/cluster-create.log` + cluster kubeconfig written
+6. Untaint CP nodes, set up MetalLB IPAddressPool, install trimmed Kommander
+7. commit-and-log
 
 **Next steps on resume:**
 1. Confirm 158 is up → SSH from 159 with nkp_rsa → fix sudo → run node-prereqs.sh
