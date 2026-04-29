@@ -41,17 +41,15 @@ CONTROL_PLANE_PORT=6443
 LB_IP_RANGE="192.168.1.201-192.168.1.210"   # ← set a free range
 
 # ── Air-gapped registry ───────────────────────────────────────────────────────
-REGISTRY_URL="https://registry.local:5000"       # ← your local registry
-REGISTRY_CACERT="/etc/ssl/certs/registry-ca.crt" # ← CA cert path on bootstrap
+# IP:port (no scheme) — used for nkp push bundle --to-registry
+REGISTRY_IP="192.168.1.159:5000"
+# https:// URL — used for nkp create cluster/bootstrap --registry-mirror-url
+REGISTRY_MIRROR_URL="https://192.168.1.159:5000"
 
-# Source registries to mirror through the local registry
-MIRROR_REGISTRIES=(
-  "docker.io"
-  "registry.k8s.io"
-  "quay.io"
-  "gcr.io"
-  "ghcr.io"
-)
+# ── NKP bundle (extracted tarball) ────────────────────────────────────────────
+BUNDLE_DIR="$HOME/nkp-bundle/nkp-v2.17.1"
+KONVOY_BUNDLE="$BUNDLE_DIR/container-images/konvoy-image-bundle-v2.17.1.tar"
+KOMMANDER_BUNDLE="$BUNDLE_DIR/container-images/kommander-image-bundle-v2.17.1.tar"
 
 # =============================================================================
 # END CONFIG
@@ -83,13 +81,14 @@ phase0_preflight() {
   step "Phase 0: Preflight"
   command -v nkp     >/dev/null || die "nkp CLI not found — install it first"
   command -v kubectl >/dev/null || die "kubectl not found — install it first"
-  command -v helm    >/dev/null || warn "helm not found — may be needed for Kommander"
+  command -v docker  >/dev/null || die "docker not found — must be pre-installed (air-gapped)"
+  [[ -f "$KONVOY_BUNDLE" ]]    || die "Konvoy bundle not found: $KONVOY_BUNDLE"
+  [[ -f "$KOMMANDER_BUNDLE" ]] || die "Kommander bundle not found: $KOMMANDER_BUNDLE"
   mkdir -p "$HOME/.kube"
-  [[ -f "$REGISTRY_CACERT" ]] || warn "CA cert not found: $REGISTRY_CACERT — set REGISTRY_URL to http:// if using insecure registry"
   log "Cluster  : $CLUSTER_NAME"
   log "VIP      : $CONTROL_PLANE_VIP:$CONTROL_PLANE_PORT"
   log "Nodes    : ${CP_IPS[*]}"
-  log "Registry : $REGISTRY_URL"
+  log "Registry : $REGISTRY_IP"
 }
 
 # =============================================================================
@@ -133,11 +132,9 @@ phase2_node_prereqs() {
   for ip in "${CP_IPS[@]}"; do
     log "  Configuring $ip..."
     ssh_node "$ip" bash -s -- \
-      "$REGISTRY_URL" "$REGISTRY_CACERT" "${MIRROR_REGISTRIES[@]}" <<'REMOTE'
+      "$REGISTRY_MIRROR_URL" <<'REMOTE'
 set -e
-MIRROR_SERVER="$1"; shift
-MIRROR_CA="$1";     shift
-REGISTRIES=("$@")
+MIRROR_SERVER="$1"
 
 # ── disable swap ──────────────────────────────────────────────────────────────
 swapoff -a 2>/dev/null || true
@@ -169,29 +166,21 @@ if ! grep -q "SystemdCgroup = true" /etc/containerd/config.toml 2>/dev/null; the
   sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 fi
 
-# ── containerd: registry mirrors (containerd v2.x hosts.toml format) ─────────
-# Each upstream registry gets a hosts.toml pointing at the local mirror.
+# ── containerd: _default catch-all mirror → local registry ───────────────────
+# _default makes containerd route ALL registry pulls through the local mirror.
 CERTS_DIR="/etc/containerd/certs.d"
-mkdir -p "$CERTS_DIR"
+mkdir -p "$CERTS_DIR/_default"
+cat > "$CERTS_DIR/_default/hosts.toml" <<EOF
+server = "${MIRROR_SERVER}"
 
-for reg in "${REGISTRIES[@]}"; do
-  mkdir -p "$CERTS_DIR/$reg"
-  {
-    echo "server = \"${MIRROR_SERVER}\""
-    echo ""
-    echo "[host.\"${MIRROR_SERVER}\"]"
-    echo "  capabilities = [\"pull\", \"resolve\"]"
-    if [[ -f "$MIRROR_CA" ]]; then
-      echo "  ca = [\"${MIRROR_CA}\"]"
-    else
-      echo "  skip_verify = true"
-    fi
-  } > "$CERTS_DIR/$reg/hosts.toml"
-done
+[host."${MIRROR_SERVER}"]
+  capabilities = ["pull", "resolve"]
+  skip_verify = true
+EOF
 
 # ── containerd config: set config_path for hosts.toml to take effect ─────────
 if ! grep -q "config_path" /etc/containerd/config.toml 2>/dev/null; then
-  sed -i '/\[plugins."io.containerd.grpc.v1.cri".registry\]/a\      config_path = "/etc/containerd/certs.d"' \
+  sed -i 's|^\(\s*\)\[plugins."io.containerd.grpc.v1.cri".registry\]|\1[plugins."io.containerd.grpc.v1.cri".registry]\n\1  config_path = "/etc/containerd/certs.d"|' \
     /etc/containerd/config.toml 2>/dev/null || true
 fi
 
@@ -207,37 +196,25 @@ REMOTE
 # =============================================================================
 # Phase 3 — Docker on bootstrap node (needed for kind bootstrap cluster)
 # =============================================================================
-phase3_docker_bootstrap() {
-  step "Phase 3: Docker on bootstrap node"
-  if command -v docker &>/dev/null && docker info &>/dev/null 2>&1; then
-    log "Docker already running — skipping"
-    return
-  fi
-  log "Installing Docker CE..."
-  apt-get install -y -q ca-certificates curl gnupg
-  install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
-  chmod a+r /etc/apt/keyrings/docker.gpg
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
-    > /etc/apt/sources.list.d/docker.list
-  apt-get update -q
-  apt-get install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin
-  usermod -aG docker "$USER" || true
-  systemctl enable --now docker >/dev/null 2>&1
-  log "✓ Docker installed"
+phase3_push_bundles() {
+  step "Phase 3: Push image bundles to local registry"
+  # Docker must be pre-installed on the bootstrap node — air-gapped env cannot
+  # pull Docker CE from the internet.
+  docker info &>/dev/null || die "Docker not running on bootstrap node"
 
-  # In air-gapped environments: load NKP bootstrap images from bundle if present
-  if [[ -f "$HOME/nkp-air-bundle.tar.gz" ]]; then
-    log "Loading bootstrap images from bundle..."
-    nkp push bundle --bundle "$HOME/nkp-air-bundle.tar.gz" \
-      --to-registry "$REGISTRY_URL" 2>/dev/null || \
-    warn "Bundle push failed — ensure images are in $REGISTRY_URL before continuing"
-  else
-    warn "No air-gapped bundle found at ~/nkp-air-bundle.tar.gz — skipping image push"
-    warn "Ensure all NKP images are already in $REGISTRY_URL"
-  fi
+  log "Pushing Konvoy images (~10 GB)..."
+  nkp push bundle \
+    --bundle "$KONVOY_BUNDLE" \
+    --to-registry "$REGISTRY_IP" \
+    --registry-insecure-skip-tls-verify
+  log "✓ Konvoy bundle pushed"
+
+  log "Pushing Kommander images (~7 GB)..."
+  nkp push bundle \
+    --bundle "$KOMMANDER_BUNDLE" \
+    --to-registry "$REGISTRY_IP" \
+    --registry-insecure-skip-tls-verify
+  log "✓ Kommander bundle pushed"
 }
 
 # =============================================================================
@@ -250,6 +227,8 @@ phase4_bootstrap() {
     log "Bootstrap cluster already running — skipping"
   else
     nkp create bootstrap \
+      --registry-mirror-url "$REGISTRY_MIRROR_URL" \
+      --registry-insecure-skip-tls-verify \
       --kubeconfig "$KUBECONFIG_BOOTSTRAP"
     log "✓ Bootstrap cluster ready"
   fi
@@ -280,7 +259,7 @@ metadata:
   labels:
     cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
 spec:
-  url: ${ip}
+  primaryIP: ${ip}
   sshAuthorizedKeys:
     - "${SSH_PUBKEY}"
 EOF
@@ -302,19 +281,16 @@ phase6_create_cluster() {
     return
   fi
 
-  local cacert_arg=()
-  [[ -f "$REGISTRY_CACERT" ]] && cacert_arg=(--registry-mirror-cacert "$REGISTRY_CACERT")
-
   nkp create cluster preprovisioned \
-    --cluster-name             "$CLUSTER_NAME" \
+    --cluster-name                "$CLUSTER_NAME" \
     --control-plane-endpoint-host "$CONTROL_PLANE_VIP" \
     --control-plane-endpoint-port "$CONTROL_PLANE_PORT" \
-    --control-plane-replicas   3 \
-    --worker-replicas          0 \
-    --ssh-username             "$SSH_USER" \
-    --ssh-private-key-file     "$SSH_KEY" \
-    --registry-mirror-url      "$REGISTRY_URL" \
-    "${cacert_arg[@]}" \
+    --control-plane-replicas      3 \
+    --worker-replicas             0 \
+    --ssh-username                "$SSH_USER" \
+    --ssh-private-key-file        "$SSH_KEY" \
+    --registry-mirror-url         "$REGISTRY_MIRROR_URL" \
+    --registry-insecure-skip-tls-verify \
     --self-managed \
     --kubeconfig "$KUBECONFIG_BOOTSTRAP"
 
@@ -414,42 +390,63 @@ phase10_kommander() {
   cat > /tmp/kommander-config.yaml <<'EOF'
 apiVersion: config.kommander.mesosphere.io/v1alpha1
 kind: Installation
-metadata:
-  name: kommander
-spec:
-  apps:
-    # ── core (keep) ──────────────────────────────────────────
-    kommander:
-      enabled: true
-    cert-manager:
-      enabled: true
-    traefik:
-      enabled: true
-    dex:
-      enabled: true
-    dex-k8s-authenticator:
-      enabled: true
-    # ── trimmed (disabled) ───────────────────────────────────
-    kube-prometheus-stack:
-      enabled: false
-    grafana-logging:
-      enabled: false
-    loki-distributed:
-      enabled: false
-    velero:
-      enabled: false
-    karma-dashboard:
-      enabled: false
-    kubernetes-dashboard:
-      enabled: false
-    centralized-grafana:
-      enabled: false
-    prometheus-adapter:
-      enabled: false
+apps:
+  dex:
+    enabled: true
+  dex-k8s-authenticator:
+    enabled: true
+  external-secrets:
+    enabled: false
+  gatekeeper:
+    enabled: false
+  git-operator:
+    enabled: true
+  grafana-logging:
+    enabled: false
+  grafana-loki:
+    enabled: false
+  kommander:
+    enabled: true
+  kommander-ui:
+    enabled: true
+  kube-prometheus-stack:
+    enabled: false
+  kubefed:
+    enabled: false
+  kubernetes-dashboard:
+    enabled: false
+  kubetunnel:
+    enabled: false
+  logging-operator:
+    enabled: false
+  nkp-insights-management:
+    enabled: false
+  prometheus-adapter:
+    enabled: false
+  reloader:
+    enabled: true
+  rook-ceph:
+    enabled: false
+  rook-ceph-cluster:
+    enabled: false
+  traefik:
+    enabled: true
+    values: |
+      service:
+        annotations: {}
+  traefik-forward-auth-mgmt:
+    enabled: true
+  velero:
+    enabled: false
+ageEncryptionSecretName: sops-age
+clusterHostname: ""
+airgapped:
+  enabled: true
 EOF
 
   nkp install kommander \
     --installer-config /tmp/kommander-config.yaml \
+    --airgapped \
     --kubeconfig "$KUBECONFIG_CLUSTER"
 
   log "✓ Kommander installed"
@@ -519,7 +516,7 @@ main() {
   phase0_preflight
   phase1_ssh_keys
   phase2_node_prereqs
-  phase3_docker_bootstrap
+  phase3_push_bundles
   phase4_bootstrap
   phase5_inventory
   phase6_create_cluster
